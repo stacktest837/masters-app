@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase';
 import type { Golfer, Score } from '@/types';
-import { calculateTeamScore, sortEntries } from '@/lib/scoring';
+import { calculateTeamScore, sortEntries, computeDailyWinners, type DailyWinner } from '@/lib/scoring';
 import RefreshButton from './RefreshButton';
 import LeaderboardClient from './LeaderboardClient';
 
 export const revalidate = 60;
+
+export type { DailyWinner };
 
 export type PickDetail = {
   golfer: Golfer;
@@ -61,6 +63,10 @@ export default async function LeaderboardPage() {
   const todayMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.today_score ?? null]));
   const holeMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_hole ?? null]));
   const roundMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_round ?? null]));
+  const r1Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round1_score ?? null]));
+  const r2Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round2_score ?? null]));
+  const r3Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round3_score ?? null]));
+  const r4Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round4_score ?? null]));
 
   const entries = (entriesRaw ?? []) as Record<string, unknown>[];
 
@@ -109,6 +115,28 @@ export default async function LeaderboardPage() {
     return { ...entry, rank, tied, movement };
   });
 
+  // Daily winners — computed from per-round scores
+  const entryInputs = (entriesRaw ?? []).map((e) => {
+    const entry = e as Record<string, unknown>;
+    return {
+      id: entry.id as string,
+      player_name: entry.player_name as string,
+      pickIds: [
+        entry.pick_tier1_id,
+        entry.pick_tier2_id,
+        entry.pick_tier3_id,
+        entry.pick_tier4_id,
+      ] as string[],
+      reserveId: entry.reserve_id as string,
+    };
+  });
+
+  const dailyWinners = computeDailyWinners(
+    entryInputs,
+    [r1Map, r2Map, r3Map, r4Map],
+    statusMap
+  );
+
   const hasScores = scores.length > 0;
   const lastUpdated = hasScores
     ? scores.reduce((latest, s) => (s.updated_at > latest ? s.updated_at : latest), scores[0].updated_at)
@@ -132,7 +160,7 @@ export default async function LeaderboardPage() {
       </div>
 
       {/* Leaderboard with client-side name lookup */}
-      <LeaderboardClient ranked={ranked} hasScores={hasScores} />
+      <LeaderboardClient ranked={ranked} hasScores={hasScores} dailyWinners={dailyWinners} />
     </div>
   );
 }

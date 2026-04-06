@@ -34,6 +34,10 @@ export interface Score {
   today_score: number | null;
   current_hole: number | null; // 0-18; 18 = finished round
   current_round: number | null; // 1-4
+  round1_score: number | null;
+  round2_score: number | null;
+  round3_score: number | null;
+  round4_score: number | null;
   updated_at: string;
 }
 

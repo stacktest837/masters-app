@@ -62,6 +62,106 @@ export function calculateTeamScore(
   };
 }
 
+// ── Daily scoring ─────────────────────────────────────────────────────────────
+
+export interface DailyWinner {
+  playerName: string;
+  entryId: string;
+  dailyScore: number;
+  tiebreakWin: boolean; // true if tiebreaker was needed to decide
+}
+
+/**
+ * Compute daily team score for one round.
+ * Uses the same reserve-substitution logic as overall scoring.
+ * MC/WD golfers with no round score trigger the reserve (same as 999 overall).
+ */
+function calculateDailyTeamScore(
+  pickIds: string[],
+  reserveId: string,
+  roundMap: Map<string, number | null>, // golfer_id → round N score (null = didn't play)
+  statusMap: Map<string, string>
+): { total: number | null; bestGolferScore: number | null } {
+  // Build effective map: real round scores + 999 sentinel for MC/WD with no round score
+  const effectiveMap = new Map<string, number>();
+  const allIds = [...pickIds, reserveId];
+  for (const id of allIds) {
+    const roundScore = roundMap.get(id) ?? null;
+    if (roundScore !== null) {
+      effectiveMap.set(id, roundScore);
+    } else {
+      const status = statusMap.get(id);
+      if (status === 'cut' || status === 'wd') {
+        effectiveMap.set(id, 999); // triggers reserve substitution
+      }
+      // null + not MC = hasn't played yet, omit
+    }
+  }
+
+  const result = calculateTeamScore({ pickIds, reserveId, tiebreaker: 0 }, effectiveMap);
+  if (result.total === null) return { total: null, bestGolferScore: null };
+
+  // Best individual golfer score (tiebreaker)
+  let best: number | null = null;
+  for (const detail of result.golferDetails) {
+    if (!detail.replaced && detail.score !== null && detail.score !== 999) {
+      if (best === null || detail.score < best) best = detail.score;
+    }
+  }
+  if (result.reserveUsed) {
+    const rs = effectiveMap.get(reserveId);
+    if (rs !== undefined && rs !== 999 && (best === null || rs < best)) best = rs;
+  }
+
+  return { total: result.total, bestGolferScore: best };
+}
+
+/**
+ * Compute the winner for each of the 4 rounds.
+ * Returns an array of 4 elements (null = no data for that round yet).
+ * Tiebreaker: lowest individual golfer round score that day.
+ */
+export function computeDailyWinners(
+  entries: { id: string; player_name: string; pickIds: string[]; reserveId: string }[],
+  roundScoreMaps: Map<string, number | null>[], // [r1Map, r2Map, r3Map, r4Map]
+  statusMap: Map<string, string>
+): (DailyWinner | null)[] {
+  return roundScoreMaps.map((roundMap) => {
+    // Round has no data yet
+    if (Array.from(roundMap.values()).every((v) => v === null)) return null;
+
+    const daily = entries.map((e) => {
+      const { total, bestGolferScore } = calculateDailyTeamScore(
+        e.pickIds, e.reserveId, roundMap, statusMap
+      );
+      return { id: e.id, playerName: e.player_name, total, best: bestGolferScore };
+    });
+
+    const valid = daily.filter((e) => e.total !== null) as {
+      id: string; playerName: string; total: number; best: number | null;
+    }[];
+    if (valid.length === 0) return null;
+
+    const minScore = Math.min(...valid.map((e) => e.total));
+    const tied = valid.filter((e) => e.total === minScore);
+
+    if (tied.length === 1) {
+      return { playerName: tied[0].playerName, entryId: tied[0].id, dailyScore: minScore, tiebreakWin: false };
+    }
+
+    // Tiebreaker: lowest individual golfer score that round
+    const minBest = Math.min(...tied.map((e) => e.best ?? Infinity));
+    const afterTb = tied.filter((e) => (e.best ?? Infinity) === minBest);
+
+    return {
+      playerName: afterTb[0].playerName,
+      entryId: afterTb[0].id,
+      dailyScore: minScore,
+      tiebreakWin: true,
+    };
+  });
+}
+
 export function sortEntries<T extends { total: number | null; tiebreaker: number }>(
   entries: T[]
 ): T[] {

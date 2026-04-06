@@ -83,6 +83,10 @@ export async function POST(req: NextRequest) {
           today_score: espnScore.todayScore,
           current_hole: espnScore.currentHole,
           current_round: espnScore.currentRound,
+          round1_score: espnScore.round1Score,
+          round2_score: espnScore.round2Score,
+          round3_score: espnScore.round3Score,
+          round4_score: espnScore.round4Score,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'golfer_id' }

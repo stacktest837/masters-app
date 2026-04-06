@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/cn';
-import type { RankedEntry } from './page';
+import type { RankedEntry, DailyWinner } from './page';
 import type { Golfer } from '@/types';
 import MyTeamTracker from '@/components/MyTeamTracker';
 
@@ -13,9 +13,80 @@ function fmt(score: number | null, status?: string): string {
   return score > 0 ? `+${score}` : String(score);
 }
 
+function fmtDaily(score: number): string {
+  if (score === 0) return 'E';
+  return score > 0 ? `+${score}` : String(score);
+}
+
 interface Props {
   ranked: RankedEntry[];
   hasScores: boolean;
+  dailyWinners: (DailyWinner | null)[];
+}
+
+// ── Payouts card ─────────────────────────────────────────────────────────────
+
+function PayoutsCard({ dailyWinners, overall }: { dailyWinners: (DailyWinner | null)[]; overall: RankedEntry | null }) {
+  const hasAny = dailyWinners.some((w) => w !== null) || (overall !== null);
+  if (!hasAny) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-4">
+      <div className="bg-masters-green px-4 py-3">
+        <p className="text-masters-gold text-[10px] font-bold uppercase tracking-[0.2em]">Payouts</p>
+      </div>
+
+      {/* Daily rounds grid */}
+      <div className="grid grid-cols-2 divide-x divide-y divide-gray-50">
+        {([1, 2, 3, 4] as const).map((round) => {
+          const winner = dailyWinners[round - 1] ?? null;
+          return (
+            <div key={round} className="px-4 py-3">
+              <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-1">
+                Round {round}
+              </p>
+              {winner ? (
+                <>
+                  <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
+                    {winner.playerName.split(' ')[0]} {winner.playerName.split(' ').slice(-1)[0]}
+                  </p>
+                  <p className="text-xs font-bold font-mono text-masters-green mt-0.5">
+                    {fmtDaily(winner.dailyScore)}
+                    {winner.tiebreakWin && (
+                      <span className="text-[9px] text-gray-400 font-normal ml-1">TB</span>
+                    )}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-300 font-medium">—</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Overall leader */}
+      {overall && (
+        <div className="border-t border-gray-100 px-4 py-3 bg-masters-gold/5">
+          <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-1">
+            Overall Leader
+          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-800">
+              {overall.player_name}
+              {overall.tied && <span className="text-[10px] text-gray-400 ml-1 font-normal">T1</span>}
+            </p>
+            <p className={cn(
+              'text-base font-bold font-mono tabular-nums',
+              overall.total !== null && overall.total < 0 ? 'text-red-500' : 'text-gray-700'
+            )}>
+              {overall.total !== null ? fmt(overall.total) : '—'}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Rank badge ──────────────────────────────────────────────────────────────
@@ -240,7 +311,7 @@ function EntryCard({
 
 // ── Main client component ────────────────────────────────────────────────────
 
-export default function LeaderboardClient({ ranked, hasScores }: Props) {
+export default function LeaderboardClient({ ranked, hasScores, dailyWinners }: Props) {
   const [nameQuery, setNameQuery] = useState('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, React.RefObject<HTMLDivElement>>>({});
@@ -284,8 +355,13 @@ export default function LeaderboardClient({ ranked, hasScores }: Props) {
     );
   }
 
+  const overallLeader = ranked.length > 0 && ranked[0].total !== null ? ranked[0] : null;
+
   return (
     <div>
+      {/* Payouts */}
+      <PayoutsCard dailyWinners={dailyWinners} overall={overallLeader} />
+
       {/* Look Up My Picks */}
       <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
         <label className="block text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-2">

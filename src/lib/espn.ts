@@ -19,6 +19,10 @@ interface ESPNScoreResult {
   todayScore: number | null;
   currentHole: number | null; // 0-18; 18 = finished round
   currentRound: number | null; // 1-4
+  round1Score: number | null;
+  round2Score: number | null;
+  round3Score: number | null;
+  round4Score: number | null;
 }
 
 const normalize = (name: string): string =>
@@ -91,24 +95,32 @@ export async function fetchMastersScores(): Promise<{
       const thru = c.status?.thru;
       const currentHole = thru === 'F' || thru === 18 ? 18 : typeof thru === 'number' ? thru : null;
 
-      // Today's round score from linescores array (index = round - 1)
-      let todayScore: number | null = null;
-      if (currentRound !== null && c.linescores && c.linescores.length >= currentRound) {
-        const todayStr = c.linescores[currentRound - 1]?.displayValue ?? c.linescores[currentRound - 1]?.value;
-        if (todayStr !== undefined && todayStr !== null) {
-          const parsed = todayStr === 'E' ? 0 : parseInt(String(todayStr));
-          if (!isNaN(parsed)) todayScore = parsed;
-        }
-      }
+      // Helper: parse a linescore value for a given round (1-indexed)
+      const parseLinescoreRound = (round: number): number | null => {
+        const ls = c.linescores?.[round - 1];
+        if (!ls) return null;
+        const str = ls.displayValue ?? ls.value;
+        if (!str) return null;
+        const n = str === 'E' ? 0 : parseInt(String(str));
+        return isNaN(n) ? null : n;
+      };
+
+      const todayScore = currentRound !== null ? parseLinescoreRound(currentRound) : null;
+      const round1Score = parseLinescoreRound(1);
+      const round2Score = parseLinescoreRound(2);
+      const round3Score = parseLinescoreRound(3);
+      const round4Score = parseLinescoreRound(4);
+
+      const roundScores = { round1Score, round2Score, round3Score, round4Score };
 
       if (cStatus === 'cut' || cStatus === 'wd') {
-        scores.push({ golferName: name, scoreToPar: 999, status: cStatus as 'cut' | 'wd', todayScore: null, currentHole: null, currentRound: null });
+        scores.push({ golferName: name, scoreToPar: 999, status: cStatus as 'cut' | 'wd', todayScore: null, currentHole: null, currentRound: null, ...roundScores });
       } else {
         const sv = c.score?.displayValue ?? c.score?.value;
         if (sv !== undefined) {
           const n = sv === 'E' ? 0 : parseInt(sv as string);
           if (!isNaN(n)) {
-            scores.push({ golferName: name, scoreToPar: n, status: 'active', todayScore, currentHole, currentRound });
+            scores.push({ golferName: name, scoreToPar: n, status: 'active', todayScore, currentHole, currentRound, ...roundScores });
           }
         }
       }
