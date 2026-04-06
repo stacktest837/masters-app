@@ -1,0 +1,32 @@
+{
+  "name": "masters-pool",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "seed": "npx tsx scripts/seed-golfers.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "14.2.15",
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10",
+    "dotenv": "^16",
+    "postcss": "^8",
+    "tailwindcss": "^3.4",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^2.0.0"
+  }
+}
