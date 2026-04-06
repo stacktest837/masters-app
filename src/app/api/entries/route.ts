@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 
-// Explicit column list — never returns pin to the client
+// Explicit column list (no SELECT * — avoids exposing internal columns)
 const ENTRY_COLS = `
   id,
   player_name,
@@ -20,29 +20,12 @@ const ENTRY_COLS = `
   reserve:reserve_id(id, name, tier, display_order)
 `;
 
-function generatePin(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
 // GET /api/entries            — all entries (admin use)
-// GET /api/entries?name=X     — single entry lookup (no pin returned)
-// GET /api/entries?name=X&pin=Y&verify=1 — verify pin, returns { ok: boolean }
+// GET /api/entries?name=X     — single entry lookup
 export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const { searchParams } = req.nextUrl;
   const name = searchParams.get('name');
-  const pin = searchParams.get('pin');
-  const verify = searchParams.get('verify');
-
-  // PIN verification request
-  if (name && pin && verify) {
-    const { data } = await supabase
-      .from('entries')
-      .select('pin')
-      .ilike('player_name', name.trim())
-      .maybeSingle();
-    return NextResponse.json({ ok: data?.pin === pin });
-  }
 
   if (name) {
     const { data, error } = await supabase
@@ -62,13 +45,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ entries: data });
 }
 
-// POST /api/entries
-//   New entry   → generates PIN, returns it once in response
-//   Edit entry  → requires { pin } in body, returns 403 on mismatch
+// POST /api/entries — create or overwrite by name
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker, pin } = body;
+    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker } = body;
 
     if (!player_name?.trim() || !player_name.trim().includes(' ')) {
       return NextResponse.json({ error: 'First and last name required' }, { status: 400 });
@@ -91,13 +72,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Picks are locked — tournament has started' }, { status: 403 });
     }
 
-    // Check for existing entry
-    const { data: existing } = await supabase
-      .from('entries')
-      .select('id, pin')
-      .ilike('player_name', player_name.trim())
-      .maybeSingle();
-
     const entryData = {
       player_name: player_name.trim(),
       pick_tier1_id,
@@ -109,11 +83,14 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
+    // Upsert by player_name
+    const { data: existing } = await supabase
+      .from('entries')
+      .select('id')
+      .ilike('player_name', player_name.trim())
+      .maybeSingle();
+
     if (existing) {
-      // Editing: verify PIN
-      if (!pin || pin.toString() !== existing.pin) {
-        return NextResponse.json({ error: 'Incorrect PIN', requiresPin: true }, { status: 403 });
-      }
       const { data, error } = await supabase
         .from('entries')
         .update(entryData)
@@ -123,16 +100,13 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ entry: data });
     } else {
-      // New entry: generate and store PIN
-      const newPin = generatePin();
       const { data, error } = await supabase
         .from('entries')
-        .insert({ ...entryData, pin: newPin })
+        .insert(entryData)
         .select(ENTRY_COLS)
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      // Return PIN once — client must save it
-      return NextResponse.json({ entry: data, pin: newPin });
+      return NextResponse.json({ entry: data });
     }
   } catch (err) {
     console.error('POST /api/entries:', err);

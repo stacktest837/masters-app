@@ -6,22 +6,33 @@ import LeaderboardClient from './LeaderboardClient';
 
 export const revalidate = 60;
 
+export type PickDetail = {
+  golfer: Golfer;
+  score: number | null;
+  status: string | undefined;
+  replaced: boolean;
+  todayScore: number | null;
+  currentHole: number | null;
+  currentRound: number | null;
+};
+
 export type RankedEntry = {
   id: string;
   player_name: string;
   total: number | null;
   tiebreaker: number;
   reserveUsed: boolean;
-  picks: { golfer: Golfer; score: number | null; status: string | undefined; replaced: boolean }[];
+  picks: PickDetail[];
   reserve: Golfer | null;
   rank: number;
   tied: boolean;
+  movement: number | null; // positive = moved up, negative = moved down, null = no snapshot
 };
 
 export default async function LeaderboardPage() {
   const supabase = createServiceClient();
 
-  const [{ data: entriesRaw }, { data: scoresRaw }] = await Promise.all([
+  const [{ data: entriesRaw }, { data: scoresRaw }, { data: configRaw }] = await Promise.all([
     supabase
       .from('entries')
       .select(`
@@ -34,11 +45,17 @@ export default async function LeaderboardPage() {
       `)
       .order('created_at'),
     supabase.from('scores').select('*'),
+    supabase.from('pool_config').select('rank_snapshot').single(),
   ]);
+
+  const rankSnapshot: Record<string, number> = (configRaw as { rank_snapshot?: Record<string, number> } | null)?.rank_snapshot ?? {};
 
   const scores = (scoresRaw as Score[] | null) ?? [];
   const scoreMap = new Map<string, number>(scores.map((s) => [s.golfer_id, s.score_to_par]));
   const statusMap = new Map<string, string>(scores.map((s) => [s.golfer_id, s.status]));
+  const todayMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.today_score ?? null]));
+  const holeMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_hole ?? null]));
+  const roundMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_round ?? null]));
 
   const entries = (entriesRaw ?? []) as Record<string, unknown>[];
 
@@ -68,6 +85,9 @@ export default async function LeaderboardPage() {
         score: scoreMap.get(id) ?? null,
         status: statusMap.get(id),
         replaced: result.golferDetails[i]?.replaced ?? false,
+        todayScore: todayMap.get(id) ?? null,
+        currentHole: holeMap.get(id) ?? null,
+        currentRound: roundMap.get(id) ?? null,
       })),
       reserve: entry.reserve as Golfer | null,
     };
@@ -79,7 +99,9 @@ export default async function LeaderboardPage() {
     const prev = idx > 0 ? sorted[idx - 1] : null;
     const tied = prev?.total !== null && prev?.total === entry.total;
     const rank = tied ? (sorted.findIndex((e) => e.total === entry.total) + 1) : idx + 1;
-    return { ...entry, rank, tied };
+    const prevRank = rankSnapshot[entry.id] ?? null;
+    const movement = prevRank !== null ? prevRank - rank : null;
+    return { ...entry, rank, tied, movement };
   });
 
   const hasScores = scores.length > 0;

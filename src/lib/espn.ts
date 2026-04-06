@@ -4,13 +4,21 @@ const ESPN_SCOREBOARD_URL =
 interface ESPNCompetitor {
   athlete: { displayName: string; shortName?: string };
   score: { displayValue?: string; value?: string };
-  status: { type: { name: string } };
+  status: {
+    type: { name: string };
+    period?: number;       // current round (1-4)
+    thru?: number | string; // holes played; 18 or "F" = round complete
+  };
+  linescores?: { value?: string; displayValue?: string }[];
 }
 
 interface ESPNScoreResult {
   golferName: string;
   scoreToPar: number; // 999 = MC/WD
   status: 'active' | 'cut' | 'wd';
+  todayScore: number | null;
+  currentHole: number | null; // 0-18; 18 = finished round
+  currentRound: number | null; // 1-4
 }
 
 const normalize = (name: string): string =>
@@ -79,14 +87,28 @@ export async function fetchMastersScores(): Promise<{
       const name = c.athlete?.displayName || c.athlete?.shortName || '';
       const cStatus = c.status?.type?.name;
 
+      const currentRound = typeof c.status?.period === 'number' ? c.status.period : null;
+      const thru = c.status?.thru;
+      const currentHole = thru === 'F' || thru === 18 ? 18 : typeof thru === 'number' ? thru : null;
+
+      // Today's round score from linescores array (index = round - 1)
+      let todayScore: number | null = null;
+      if (currentRound !== null && c.linescores && c.linescores.length >= currentRound) {
+        const todayStr = c.linescores[currentRound - 1]?.displayValue ?? c.linescores[currentRound - 1]?.value;
+        if (todayStr !== undefined && todayStr !== null) {
+          const parsed = todayStr === 'E' ? 0 : parseInt(String(todayStr));
+          if (!isNaN(parsed)) todayScore = parsed;
+        }
+      }
+
       if (cStatus === 'cut' || cStatus === 'wd') {
-        scores.push({ golferName: name, scoreToPar: 999, status: cStatus as 'cut' | 'wd' });
+        scores.push({ golferName: name, scoreToPar: 999, status: cStatus as 'cut' | 'wd', todayScore: null, currentHole: null, currentRound: null });
       } else {
         const sv = c.score?.displayValue ?? c.score?.value;
         if (sv !== undefined) {
           const n = sv === 'E' ? 0 : parseInt(sv as string);
           if (!isNaN(n)) {
-            scores.push({ golferName: name, scoreToPar: n, status: 'active' });
+            scores.push({ golferName: name, scoreToPar: n, status: 'active', todayScore, currentHole, currentRound });
           }
         }
       }

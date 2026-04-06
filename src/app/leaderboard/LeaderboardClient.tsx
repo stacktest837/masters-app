@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/cn';
 import type { RankedEntry } from './page';
 import type { Golfer } from '@/types';
+import MyTeamTracker from '@/components/MyTeamTracker';
 
 function fmt(score: number | null, status?: string): string {
   if (score === null) return '—';
@@ -47,6 +48,24 @@ function RankBadge({ rank, tied }: { rank: number; tied: boolean }) {
   );
 }
 
+// ── Movement badge ───────────────────────────────────────────────────────────
+
+function MovementBadge({ movement }: { movement: number | null }) {
+  if (movement === null) return null;
+  if (movement === 0) return <span className="text-[10px] text-gray-400 font-mono">—</span>;
+  if (movement > 0)
+    return (
+      <span className="text-[10px] font-bold text-emerald-500 font-mono">
+        ↑{movement}
+      </span>
+    );
+  return (
+    <span className="text-[10px] font-bold text-red-400 font-mono">
+      ↓{Math.abs(movement)}
+    </span>
+  );
+}
+
 // ── Score display ────────────────────────────────────────────────────────────
 
 function ScoreDisplay({ total, hasScores }: { total: number | null; hasScores: boolean }) {
@@ -72,11 +91,13 @@ function GolferChip({
   score,
   status,
   replaced,
+  highlight,
 }: {
   golfer: Golfer;
   score: number | null;
   status: string | undefined;
   replaced: boolean;
+  highlight?: 'best' | 'worst' | null;
 }) {
   const mc = score === 999 || status === 'cut' || status === 'wd';
   const lastName = golfer.name.split(' ').slice(-1)[0];
@@ -88,15 +109,22 @@ function GolferChip({
         'golfer-chip',
         mc || replaced
           ? 'bg-gray-100 text-gray-400 line-through'
+          : highlight === 'best'
+          ? 'bg-masters-green/15 text-masters-green ring-1 ring-masters-green/40'
+          : highlight === 'worst'
+          ? 'bg-red-50 text-red-500 ring-1 ring-red-300'
           : 'bg-masters-green/10 text-masters-green'
       )}
     >
+      {highlight === 'best' && !mc && !replaced && (
+        <span className="text-[9px] leading-none">⭐</span>
+      )}
       <span>{lastName}</span>
       {scoreStr && (
         <span
           className={cn(
             'font-mono font-bold',
-            mc ? 'text-gray-400' : score !== null && score < 0 ? 'text-red-500' : ''
+            mc ? 'text-gray-400' : highlight === 'worst' ? 'text-red-500' : score !== null && score < 0 ? 'text-red-500' : ''
           )}
         >
           {scoreStr}
@@ -135,7 +163,10 @@ function EntryCard({
     >
       {/* Main row */}
       <div className={cn('flex items-center gap-3 px-4 py-4', isLeader && 'bg-masters-gold/5')}>
-        <RankBadge rank={entry.rank} tied={entry.tied} />
+        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+          <RankBadge rank={entry.rank} tied={entry.tied} />
+          <MovementBadge movement={entry.movement} />
+        </div>
 
         <div className="flex-1 min-w-0">
           <p className="font-serif font-bold text-gray-900 text-base leading-tight truncate">
@@ -152,17 +183,32 @@ function EntryCard({
       {/* Golfer chips */}
       <div className="px-4 pb-3 border-t border-gray-50 pt-3">
         <div className="flex flex-wrap gap-1.5">
-          {entry.picks.map(({ golfer, score, status, replaced }) =>
-            golfer ? (
+          {entry.picks.map(({ golfer, score, status, replaced }) => {
+            if (!golfer) return null;
+            const mc = score === 999 || status === 'cut' || status === 'wd';
+            const effectiveScore = mc || replaced ? null : score;
+            let highlight: 'best' | 'worst' | null = null;
+            if (hasScores && effectiveScore !== null) {
+              const activePicks = entry.picks.filter(
+                (p) => p.score !== null && p.score !== 999 && p.status !== 'cut' && p.status !== 'wd' && !p.replaced
+              );
+              const scores = activePicks.map((p) => p.score as number);
+              if (scores.length > 1) {
+                if (effectiveScore === Math.min(...scores)) highlight = 'best';
+                else if (effectiveScore === Math.max(...scores)) highlight = 'worst';
+              }
+            }
+            return (
               <GolferChip
                 key={golfer.id}
                 golfer={golfer}
                 score={score}
                 status={status}
                 replaced={replaced}
+                highlight={highlight}
               />
-            ) : null
-          )}
+            );
+          })}
         </div>
 
         {/* Reserve + tiebreaker */}
@@ -179,6 +225,15 @@ function EntryCard({
           </span>
         </div>
       </div>
+
+      {/* Track My Team — expanded when entry is highlighted */}
+      {highlighted && (
+        <MyTeamTracker
+          picks={entry.picks.map((p) => p.golfer)}
+          reserve={entry.reserve}
+          tiebreaker={entry.tiebreaker}
+        />
+      )}
     </div>
   );
 }

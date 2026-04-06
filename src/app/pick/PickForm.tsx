@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/cn';
 import type { Golfer } from '@/types';
+import MyTeamTracker from '@/components/MyTeamTracker';
 
 interface Props {
   tier1: Golfer[];
@@ -147,7 +148,6 @@ function ConfirmationView({
   tiebreaker,
   isNew,
   isLocked,
-  savedPin,
   onEditRequest,
   onChangeName,
 }: {
@@ -156,46 +156,11 @@ function ConfirmationView({
   tiebreaker: number;
   isNew: boolean;
   isLocked: boolean;
-  savedPin?: string | null;
   onEditRequest?: () => void;
   onChangeName?: () => void;
 }) {
-  const [pinInput, setPinInput] = useState('');
-  const [showPinGate, setShowPinGate] = useState(false);
-  const [pinError, setPinError] = useState('');
-  const [verifying, setVerifying] = useState(false);
-
   const firstName = playerName.split(' ')[0];
   const tierGolfers = [picksDisplay.tier1, picksDisplay.tier2, picksDisplay.tier3, picksDisplay.tier4];
-
-  async function handleEditClick() {
-    // New submission this session — PIN already known, skip gate
-    if (savedPin) { onEditRequest?.(); return; }
-    setShowPinGate(true);
-    setPinError('');
-    setPinInput('');
-  }
-
-  async function handlePinVerify() {
-    if (pinInput.length !== 4) { setPinError('Enter your 4-digit PIN'); return; }
-    setVerifying(true);
-    setPinError('');
-    try {
-      const res = await fetch(
-        `/api/entries?name=${encodeURIComponent(playerName)}&pin=${pinInput}&verify=1`
-      );
-      const json = await res.json();
-      if (json.ok) {
-        onEditRequest?.();
-      } else {
-        setPinError('Incorrect PIN — try again');
-      }
-    } catch {
-      setPinError('Connection error — try again');
-    } finally {
-      setVerifying(false);
-    }
-  }
 
   return (
     <div className="animate-scale-in">
@@ -233,62 +198,11 @@ function ConfirmationView({
         </div>
       </div>
 
-      {/* PIN display — shown once after first submit */}
-      {savedPin && (
-        <div className="bg-masters-gold/10 border border-masters-gold/30 rounded-2xl px-4 py-4 mb-4 animate-fade-in">
-          <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-1">
-            Your Edit PIN — save this!
-          </p>
-          <p className="font-mono text-3xl font-bold text-masters-green tracking-[0.3em] my-1">
-            {savedPin}
-          </p>
-          <p className="text-xs text-gray-500">
-            You&apos;ll need this PIN to edit your picks. It won&apos;t be shown again.
-          </p>
-        </div>
-      )}
-
-      {/* PIN gate — shown when Edit Picks is tapped on a returning visit */}
-      {showPinGate && !savedPin && (
-        <div className="bg-white rounded-2xl shadow-card p-4 mb-4 animate-fade-in">
-          <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-3">
-            Enter Your Edit PIN
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="· · · ·"
-              value={pinInput}
-              onChange={(e) => { setPinInput(e.target.value.replace(/\D/g, '')); setPinError(''); }}
-              onKeyDown={(e) => e.key === 'Enter' && handlePinVerify()}
-              className="flex-1 border border-gray-200 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-[0.4em] focus:outline-none focus:border-masters-green focus:ring-1 focus:ring-masters-green/30 transition-all"
-              autoFocus
-            />
-            <button
-              onClick={handlePinVerify}
-              disabled={verifying || pinInput.length !== 4}
-              className="bg-masters-green text-white font-semibold px-5 py-3 rounded-xl hover:bg-masters-green-dark transition-colors pressable disabled:opacity-50"
-            >
-              {verifying ? '…' : 'Enter'}
-            </button>
-          </div>
-          {pinError && <p className="text-red-500 text-xs mt-2">{pinError}</p>}
-          <button
-            onClick={() => setShowPinGate(false)}
-            className="text-xs text-gray-400 hover:text-gray-600 mt-3 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
       {/* Actions */}
       {!isLocked && (
         <div className="flex gap-3 mb-3">
           <button
-            onClick={handleEditClick}
+            onClick={() => onEditRequest?.()}
             className="flex-1 border-2 border-masters-green text-masters-green font-semibold py-3.5 rounded-2xl hover:bg-masters-green/5 transition-colors pressable text-sm"
           >
             Edit Picks
@@ -317,6 +231,15 @@ function ConfirmationView({
           Not {firstName}? Change name →
         </button>
       )}
+
+      {/* Team tracker */}
+      <div className="bg-white rounded-2xl shadow-card overflow-hidden mt-4">
+        <MyTeamTracker
+          picks={[picksDisplay.tier1, picksDisplay.tier2, picksDisplay.tier3, picksDisplay.tier4]}
+          reserve={picksDisplay.reserve}
+          tiebreaker={tiebreaker}
+        />
+      </div>
     </div>
   );
 }
@@ -329,7 +252,6 @@ function EditView({
   playerName,
   picks,
   tiebreaker,
-  pin,
   tier1,
   tier2,
   tier3,
@@ -341,7 +263,6 @@ function EditView({
   playerName: string;
   picks: Picks;
   tiebreaker: number;
-  pin: string;
   tier1: Golfer[];
   tier2: Golfer[];
   tier3: Golfer[];
@@ -369,7 +290,6 @@ function EditView({
         pick_tier4_id: newPicks.tier4,
         reserve_id: newPicks.reserve,
         tiebreaker: newTiebreaker,
-        pin,
       }),
     });
   }
@@ -554,12 +474,9 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
 
   const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
   const [tiebreaker, setTiebreaker] = useState(0);
-  // PIN for the current session: set after first submit, used to skip PIN gate for immediate edits
-  const [sessionPin, setSessionPin] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-
   const lookupTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Auto-lookup on name change
@@ -621,7 +538,6 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
       if (!res.ok) { setSubmitError(json.error || 'Submission failed'); }
       else {
         setIsNew(true);
-        if (json.pin) setSessionPin(json.pin); // store PIN for this session
         setViewMode('confirmation');
       }
     } catch {
@@ -653,7 +569,7 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
           tiebreaker={tiebreaker}
           isNew={false}
           isLocked={true}
-          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); }}
+          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setTiebreaker(0); }}
         />
       );
     }
@@ -685,7 +601,6 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
         playerName={nameInput.trim()}
         picks={picks}
         tiebreaker={tiebreaker}
-        pin={sessionPin ?? ''}
         tier1={tier1} tier2={tier2} tier3={tier3} tier4={tier4}
         onPicksChange={setPicks}
         onTiebreakerChange={setTiebreaker}
@@ -705,9 +620,8 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
           tiebreaker={tiebreaker}
           isNew={isNew}
           isLocked={false}
-          savedPin={sessionPin}
           onEditRequest={() => setViewMode('editing')}
-          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setTiebreaker(0); setSessionPin(null); setViewMode('picking'); }}
+          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setTiebreaker(0); setViewMode('picking'); }}
         />
       );
     }

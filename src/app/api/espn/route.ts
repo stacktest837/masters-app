@@ -37,6 +37,32 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Capture current rank snapshot before overwriting scores
+    const [{ data: entriesSnap }, { data: scoresSnap }, { data: configSnap }] = await Promise.all([
+      supabase.from('entries').select('id, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker'),
+      supabase.from('scores').select('golfer_id, score_to_par, status'),
+      supabase.from('pool_config').select('id').single(),
+    ]);
+
+    // Build rank snapshot from current scores
+    if (entriesSnap && scoresSnap) {
+      const { calculateTeamScore, sortEntries } = await import('@/lib/scoring');
+      const scoreMap = new Map<string, number>((scoresSnap as { golfer_id: string; score_to_par: number }[]).map((s) => [s.golfer_id, s.score_to_par]));
+
+      const withScores = (entriesSnap as { id: string; pick_tier1_id: string; pick_tier2_id: string; pick_tier3_id: string; pick_tier4_id: string; reserve_id: string; tiebreaker: number }[]).map((e) => ({
+        id: e.id,
+        tiebreaker: e.tiebreaker,
+        ...calculateTeamScore({ pickIds: [e.pick_tier1_id, e.pick_tier2_id, e.pick_tier3_id, e.pick_tier4_id], reserveId: e.reserve_id, tiebreaker: e.tiebreaker }, scoreMap),
+      }));
+      const sorted = sortEntries(withScores);
+      const snapshot: Record<string, number> = {};
+      sorted.forEach((entry, idx) => { snapshot[entry.id] = idx + 1; });
+
+      if (configSnap) {
+        await supabase.from('pool_config').update({ rank_snapshot: snapshot, updated_at: new Date().toISOString() }).eq('id', (configSnap as { id: string }).id);
+      }
+    }
+
     let synced = 0;
     const unmatched: string[] = [];
 
@@ -54,6 +80,9 @@ export async function POST(req: NextRequest) {
           golfer_id: golfer.id,
           score_to_par: espnScore.scoreToPar,
           status: espnScore.status,
+          today_score: espnScore.todayScore,
+          current_hole: espnScore.currentHole,
+          current_round: espnScore.currentRound,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'golfer_id' }

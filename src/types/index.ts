@@ -31,12 +31,16 @@ export interface Score {
   golfer_id: string;
   score_to_par: number; // 999 = missed cut / WD
   status: 'active' | 'cut' | 'wd';
+  today_score: number | null;
+  current_hole: number | null; // 0-18; 18 = finished round
+  current_round: number | null; // 1-4
   updated_at: string;
 }
 
 export interface PoolConfig {
   id: string;
   picks_locked: boolean;
+  rank_snapshot: Record<string, number>; // entryId → rank before last sync
   updated_at: string;
 }
 
