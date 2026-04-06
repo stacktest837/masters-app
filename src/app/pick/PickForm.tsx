@@ -32,10 +32,6 @@ const TIER_META: Record<number, { label: string; description: string }> = {
   4: { label: 'Tier 4', description: 'The Field' },
 };
 
-function fmtTB(n: number) {
-  return n < 0 ? String(n) : n === 0 ? 'E' : `+${n}`;
-}
-
 // ── Shared: Golfer card ──────────────────────────────────────────────────────
 
 function GolferCard({ golfer, selected, onClick }: { golfer: Golfer; selected: boolean; onClick: () => void }) {
@@ -145,7 +141,6 @@ interface PicksDisplay {
 function ConfirmationView({
   playerName,
   picksDisplay,
-  tiebreaker,
   isNew,
   isLocked,
   onEditRequest,
@@ -153,7 +148,6 @@ function ConfirmationView({
 }: {
   playerName: string;
   picksDisplay: PicksDisplay;
-  tiebreaker: number;
   isNew: boolean;
   isLocked: boolean;
   onEditRequest?: () => void;
@@ -191,10 +185,6 @@ function ConfirmationView({
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Reserve</p>
             <p className="text-gray-600 font-medium text-sm mt-0.5">{picksDisplay.reserve.name}</p>
           </div>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3.5 bg-masters-surface border-t border-gray-100">
-          <p className="text-xs text-gray-500">Tiebreaker guess</p>
-          <p className="text-sm font-bold text-masters-green font-mono">{fmtTB(tiebreaker)}</p>
         </div>
       </div>
 
@@ -237,7 +227,6 @@ function ConfirmationView({
         <MyTeamTracker
           picks={[picksDisplay.tier1, picksDisplay.tier2, picksDisplay.tier3, picksDisplay.tier4]}
           reserve={picksDisplay.reserve}
-          tiebreaker={tiebreaker}
         />
       </div>
     </div>
@@ -246,39 +235,34 @@ function ConfirmationView({
 
 // ── Editing view: per-tier inline expand ────────────────────────────────────
 
-type EditField = 'tier1' | 'tier2' | 'tier3' | 'tier4' | 'reserve' | 'tiebreaker';
+type EditField = 'tier1' | 'tier2' | 'tier3' | 'tier4' | 'reserve';
 
 function EditView({
   playerName,
   picks,
-  tiebreaker,
   tier1,
   tier2,
   tier3,
   tier4,
   onPicksChange,
-  onTiebreakerChange,
   onBack,
 }: {
   playerName: string;
   picks: Picks;
-  tiebreaker: number;
   tier1: Golfer[];
   tier2: Golfer[];
   tier3: Golfer[];
   tier4: Golfer[];
   onPicksChange: (p: Picks) => void;
-  onTiebreakerChange: (n: number) => void;
   onBack: () => void;
 }) {
   const [expanded, setExpanded] = useState<EditField | null>(null);
   const [saving, setSaving] = useState<EditField | null>(null);
   const [saved, setSaved] = useState<EditField | null>(null);
-  const [tbInput, setTbInput] = useState(String(tiebreaker));
   const allGolfers = [...tier1, ...tier2, ...tier3, ...tier4];
   const golferById = (id: string) => allGolfers.find((g) => g.id === id);
 
-  async function saveEntry(newPicks: Picks, newTiebreaker: number) {
+  async function saveEntry(newPicks: Picks) {
     await fetch('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -289,40 +273,26 @@ function EditView({
         pick_tier3_id: newPicks.tier3,
         pick_tier4_id: newPicks.tier4,
         reserve_id: newPicks.reserve,
-        tiebreaker: newTiebreaker,
+        tiebreaker: 0,
       }),
     });
   }
 
   async function handlePickChange(field: keyof Picks, newId: string) {
     const newPicks = { ...picks, [field]: newId };
-    // if tier4 changes to what was the reserve, clear reserve
     if (field === 'tier4' && picks.reserve === newId) newPicks.reserve = '';
     setExpanded(null);
     setSaving(field as EditField);
     onPicksChange(newPicks);
-    try { await saveEntry(newPicks, tiebreaker); } catch { /* silent — user sees optimistic update */ }
+    try { await saveEntry(newPicks); } catch { /* silent — user sees optimistic update */ }
     setSaving(null);
     setSaved(field as EditField);
-    setTimeout(() => setSaved(null), 2000);
-  }
-
-  async function handleTiebreakerSave() {
-    const val = Number(tbInput);
-    if (isNaN(val)) return;
-    setExpanded(null);
-    setSaving('tiebreaker');
-    onTiebreakerChange(val);
-    try { await saveEntry(picks, val); } catch { /* silent */ }
-    setSaving(null);
-    setSaved('tiebreaker');
     setTimeout(() => setSaved(null), 2000);
   }
 
   const tierGolfers: Record<EditField, Golfer[]> = {
     tier1, tier2, tier3, tier4,
     reserve: tier4.filter((g) => g.id !== picks.tier4),
-    tiebreaker: [],
   };
 
   const tierLabels: Record<EditField, string> = {
@@ -331,11 +301,9 @@ function EditView({
     tier3: 'Tier 3 — Dark Horses',
     tier4: 'Tier 4 — The Field',
     reserve: 'Reserve (Tier 4)',
-    tiebreaker: 'Tiebreaker',
   };
 
   const currentValueFor = (field: EditField): string => {
-    if (field === 'tiebreaker') return fmtTB(tiebreaker);
     const g = golferById(picks[field as keyof Picks]);
     return g?.name ?? '—';
   };
@@ -351,7 +319,7 @@ function EditView({
         <div className="flex items-center justify-between px-4 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest">{tierLabels[field]}</p>
-            <p className={cn('text-sm font-medium mt-0.5', field === 'reserve' || field === 'tiebreaker' ? 'text-gray-600' : 'text-gray-800')}>
+            <p className={cn('text-sm font-medium mt-0.5', field === 'reserve' ? 'text-gray-600' : 'text-gray-800')}>
               {currentValueFor(field)}
             </p>
           </div>
@@ -377,7 +345,7 @@ function EditView({
         </div>
 
         {/* Expanded: golfer grid */}
-        {isOpen && field !== 'tiebreaker' && (
+        {isOpen && (
           <div className="px-3 pb-3 bg-masters-surface border-t border-gray-100 animate-fade-in">
             {field === 'reserve' && !picks.tier4 ? (
               <p className="text-sm text-gray-400 italic py-3 px-1">Select your Tier 4 pick first</p>
@@ -396,28 +364,6 @@ function EditView({
           </div>
         )}
 
-        {/* Expanded: tiebreaker input */}
-        {isOpen && field === 'tiebreaker' && (
-          <div className="px-4 pb-4 bg-masters-surface border-t border-gray-100 animate-fade-in">
-            <div className="flex items-center gap-3 pt-3">
-              <input
-                type="number"
-                value={tbInput}
-                onChange={(e) => setTbInput(e.target.value)}
-                className="w-28 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:border-masters-green focus:ring-1 focus:ring-masters-green/30 transition-all"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={handleTiebreakerSave}
-                className="bg-masters-green text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-masters-green-dark transition-colors pressable"
-              >
-                Save
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">Guess for winner&apos;s final score (e.g. -12)</p>
-          </div>
-        )}
       </div>
     );
   }
@@ -444,7 +390,7 @@ function EditView({
 
       {/* Edit rows */}
       <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-4">
-        {(['tier1', 'tier2', 'tier3', 'tier4', 'reserve', 'tiebreaker'] as EditField[]).map((field) => (
+        {(['tier1', 'tier2', 'tier3', 'tier4', 'reserve'] as EditField[]).map((field) => (
           <EditRow key={field} field={field} />
         ))}
       </div>
@@ -473,7 +419,6 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
   const [lookupStatus, setLookupStatus] = useState<LookupStatus>('idle');
 
   const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
-  const [tiebreaker, setTiebreaker] = useState(0);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -496,7 +441,6 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
       if (json.entry) {
         const e = json.entry;
         setPicks({ tier1: e.pick_tier1_id, tier2: e.pick_tier2_id, tier3: e.pick_tier3_id, tier4: e.pick_tier4_id, reserve: e.reserve_id });
-        setTiebreaker(e.tiebreaker);
         setIsNew(false);
         setLookupStatus('found');
         if (!isLocked) setViewMode('confirmation'); // jump straight to confirmation
@@ -525,14 +469,13 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
     if (!picks.tier1 || !picks.tier2 || !picks.tier3 || !picks.tier4 || !picks.reserve) {
       setSubmitError('Make all picks and choose a reserve before submitting'); return;
     }
-    if (isNaN(tiebreaker)) { setSubmitError('Enter your tiebreaker guess'); return; }
 
     setSubmitting(true);
     try {
       const res = await fetch('/api/entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: name, pick_tier1_id: picks.tier1, pick_tier2_id: picks.tier2, pick_tier3_id: picks.tier3, pick_tier4_id: picks.tier4, reserve_id: picks.reserve, tiebreaker }),
+        body: JSON.stringify({ player_name: name, pick_tier1_id: picks.tier1, pick_tier2_id: picks.tier2, pick_tier3_id: picks.tier3, pick_tier4_id: picks.tier4, reserve_id: picks.reserve, tiebreaker: 0 }),
       });
       const json = await res.json();
       if (!res.ok) { setSubmitError(json.error || 'Submission failed'); }
@@ -566,10 +509,9 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
         <ConfirmationView
           playerName={nameInput.trim()}
           picksDisplay={pd}
-          tiebreaker={tiebreaker}
           isNew={false}
           isLocked={true}
-          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setTiebreaker(0); }}
+          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); }}
         />
       );
     }
@@ -600,10 +542,8 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
       <EditView
         playerName={nameInput.trim()}
         picks={picks}
-        tiebreaker={tiebreaker}
         tier1={tier1} tier2={tier2} tier3={tier3} tier4={tier4}
         onPicksChange={setPicks}
-        onTiebreakerChange={setTiebreaker}
         onBack={() => setViewMode('confirmation')}
       />
     );
@@ -617,11 +557,10 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
         <ConfirmationView
           playerName={nameInput.trim()}
           picksDisplay={pd}
-          tiebreaker={tiebreaker}
           isNew={isNew}
           isLocked={false}
           onEditRequest={() => setViewMode('editing')}
-          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setTiebreaker(0); setViewMode('picking'); }}
+          onChangeName={() => { setNameInput(''); setLookupStatus('idle'); setPicks(EMPTY_PICKS); setViewMode('picking'); }}
         />
       );
     }
@@ -670,21 +609,6 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
           )}
           {picks.tier4 && !picks.reserve && <p className="text-xs text-red-400/80 mt-2 pl-1">Select a reserve</p>}
           <p className="text-xs text-gray-400 mt-2 px-1">Replaces your Tier 4 pick if they miss the cut</p>
-        </div>
-      </div>
-
-      {/* Tiebreaker */}
-      <div className="bg-white rounded-2xl shadow-card p-4 !mt-4">
-        <label className="block text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-3">Tiebreaker</label>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            placeholder="-12"
-            value={tiebreaker === 0 ? '' : tiebreaker}
-            onChange={(e) => setTiebreaker(Number(e.target.value))}
-            className="w-28 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:border-masters-green focus:ring-1 focus:ring-masters-green/30 transition-all"
-          />
-          <p className="text-xs text-gray-400 flex-1">Winner&apos;s final score guess. Closest wins a tie.</p>
         </div>
       </div>
 
