@@ -282,19 +282,18 @@ function EntryCard({
           })}
         </div>
 
-        {/* Reserve + tiebreaker */}
-        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-50">
-          <span className="text-[11px] text-gray-400">
-            Rsv:{' '}
-            <span className={cn('font-medium', entry.reserveUsed ? 'text-masters-green' : 'text-gray-500')}>
-              {entry.reserve ? entry.reserve.name.split(' ').slice(-1)[0] : '—'}
-              {entry.reserveUsed ? ' ✓' : ''}
+        {/* Reserve */}
+        {entry.reserve && (
+          <div className="mt-2.5 pt-2 border-t border-gray-50">
+            <span className="text-[11px] text-gray-400">
+              Rsv:{' '}
+              <span className={cn('font-medium', entry.reserveUsed ? 'text-masters-green' : 'text-gray-500')}>
+                {entry.reserve.name.split(' ').slice(-1)[0]}
+                {entry.reserveUsed ? ' ✓' : ''}
+              </span>
             </span>
-          </span>
-          <span className="text-[11px] text-gray-400 font-mono">
-            TB: {entry.tiebreaker < 0 ? entry.tiebreaker : entry.tiebreaker === 0 ? 'E' : `+${entry.tiebreaker}`}
-          </span>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Track My Team — expanded when entry is highlighted */}
@@ -302,7 +301,6 @@ function EntryCard({
         <MyTeamTracker
           picks={entry.picks.map((p) => p.golfer)}
           reserve={entry.reserve}
-          tiebreaker={entry.tiebreaker}
         />
       )}
     </div>

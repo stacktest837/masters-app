@@ -57,9 +57,6 @@ export async function POST(req: NextRequest) {
     if (!pick_tier1_id || !pick_tier2_id || !pick_tier3_id || !pick_tier4_id || !reserve_id) {
       return NextResponse.json({ error: 'All tier picks and reserve are required' }, { status: 400 });
     }
-    if (tiebreaker === undefined || tiebreaker === null || tiebreaker === '') {
-      return NextResponse.json({ error: 'Tiebreaker is required' }, { status: 400 });
-    }
     if (reserve_id === pick_tier4_id) {
       return NextResponse.json({ error: 'Reserve must differ from Tier 4 pick' }, { status: 400 });
     }

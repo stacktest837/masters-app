@@ -15,7 +15,6 @@ interface ScoreData {
 interface Props {
   picks: Golfer[]; // 4 golfers in tier order [T1, T2, T3, T4]
   reserve: Golfer | null;
-  tiebreaker: number;
 }
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -50,7 +49,7 @@ function StatusDot({ status, hasScore }: { status: string | null; hasScore: bool
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function MyTeamTracker({ picks, reserve, tiebreaker }: Props) {
+export default function MyTeamTracker({ picks, reserve }: Props) {
   const [isOpen, setIsOpen] = useState(true);
   const [scores, setScores] = useState<Record<string, ScoreData>>({});
   const [loading, setLoading] = useState(false);
@@ -259,12 +258,8 @@ export default function MyTeamTracker({ picks, reserve, tiebreaker }: Props) {
             )}
           </div>
 
-          {/* Footer: tiebreaker + refresh */}
-          <div className="mt-3 pt-2.5 border-t border-masters-green/10 flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-mono">
-              TB:{' '}
-              {tiebreaker < 0 ? tiebreaker : tiebreaker === 0 ? 'E' : `+${tiebreaker}`}
-            </span>
+          {/* Footer: refresh */}
+          <div className="mt-3 pt-2.5 border-t border-masters-green/10 flex justify-end">
             <button
               type="button"
               onClick={fetchScores}
