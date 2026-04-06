@@ -32,12 +32,17 @@ export type RankedEntry = {
   movement: number | null; // positive = moved up, negative = moved down, null = no snapshot
 };
 
-export default async function LeaderboardPage() {
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams?: { preview?: string };
+}) {
   const supabase = createServiceClient();
 
-  // Guard: leaderboard is hidden until picks are locked
+  // Guard: leaderboard is hidden until picks are locked (admin preview bypasses this)
+  const isPreview = searchParams?.preview === process.env.ADMIN_PASSWORD;
   const { data: lockCheck } = await supabase.from('pool_config').select('picks_locked').single();
-  if (!lockCheck?.picks_locked) redirect('/pick');
+  if (!lockCheck?.picks_locked && !isPreview) redirect('/pick');
 
   const [{ data: entriesRaw }, { data: scoresRaw }, { data: configRaw }] = await Promise.all([
     supabase

@@ -183,18 +183,28 @@ export default function AdminPage() {
                 : 'Players can submit and edit picks'}
             </p>
           </div>
-          <button
-            onClick={toggleLock}
-            disabled={lockLoading || !config}
-            className={[
-              'px-4 py-2 rounded font-semibold text-sm transition-colors disabled:opacity-50',
-              config?.picks_locked
-                ? 'bg-masters-green text-white hover:bg-masters-green-dark'
-                : 'bg-red-600 text-white hover:bg-red-700',
-            ].join(' ')}
-          >
-            {lockLoading ? '…' : config?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/leaderboard?preview=${password}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded font-semibold text-sm border border-masters-green text-masters-green hover:bg-masters-green/5 transition-colors"
+            >
+              Preview
+            </a>
+            <button
+              onClick={toggleLock}
+              disabled={lockLoading || !config}
+              className={[
+                'px-4 py-2 rounded font-semibold text-sm transition-colors disabled:opacity-50',
+                config?.picks_locked
+                  ? 'bg-masters-green text-white hover:bg-masters-green-dark'
+                  : 'bg-red-600 text-white hover:bg-red-700',
+              ].join(' ')}
+            >
+              {lockLoading ? '…' : config?.picks_locked ? 'Unlock Picks' : 'Lock Picks'}
+            </button>
+          </div>
         </div>
       </div>
 
