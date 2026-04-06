@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 
-const GOLFER_JOIN = `
-  *,
+// Explicit column list — never returns pin to the client
+const ENTRY_COLS = `
+  id,
+  player_name,
+  pick_tier1_id,
+  pick_tier2_id,
+  pick_tier3_id,
+  pick_tier4_id,
+  reserve_id,
+  tiebreaker,
+  created_at,
+  updated_at,
   pick_tier1:pick_tier1_id(id, name, tier, display_order),
   pick_tier2:pick_tier2_id(id, name, tier, display_order),
   pick_tier3:pick_tier3_id(id, name, tier, display_order),
@@ -10,15 +20,34 @@ const GOLFER_JOIN = `
   reserve:reserve_id(id, name, tier, display_order)
 `;
 
-// GET /api/entries — all entries, or ?name=X for single entry lookup
+function generatePin(): string {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+// GET /api/entries            — all entries (admin use)
+// GET /api/entries?name=X     — single entry lookup (no pin returned)
+// GET /api/entries?name=X&pin=Y&verify=1 — verify pin, returns { ok: boolean }
 export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
-  const name = req.nextUrl.searchParams.get('name');
+  const { searchParams } = req.nextUrl;
+  const name = searchParams.get('name');
+  const pin = searchParams.get('pin');
+  const verify = searchParams.get('verify');
+
+  // PIN verification request
+  if (name && pin && verify) {
+    const { data } = await supabase
+      .from('entries')
+      .select('pin')
+      .ilike('player_name', name.trim())
+      .maybeSingle();
+    return NextResponse.json({ ok: data?.pin === pin });
+  }
 
   if (name) {
     const { data, error } = await supabase
       .from('entries')
-      .select(GOLFER_JOIN)
+      .select(ENTRY_COLS)
       .ilike('player_name', name.trim())
       .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -27,17 +56,19 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('entries')
-    .select(GOLFER_JOIN)
+    .select(ENTRY_COLS)
     .order('created_at');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ entries: data });
 }
 
-// POST /api/entries — upsert entry (respects lock state)
+// POST /api/entries
+//   New entry   → generates PIN, returns it once in response
+//   Edit entry  → requires { pin } in body, returns 403 on mismatch
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker } = body;
+    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker, pin } = body;
 
     if (!player_name?.trim() || !player_name.trim().includes(' ')) {
       return NextResponse.json({ error: 'First and last name required' }, { status: 400 });
@@ -54,31 +85,55 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
+    // Check lock state
     const { data: config } = await supabase.from('pool_config').select('picks_locked').single();
     if (config?.picks_locked) {
       return NextResponse.json({ error: 'Picks are locked — tournament has started' }, { status: 403 });
     }
 
-    const { data, error } = await supabase
+    // Check for existing entry
+    const { data: existing } = await supabase
       .from('entries')
-      .upsert(
-        {
-          player_name: player_name.trim(),
-          pick_tier1_id,
-          pick_tier2_id,
-          pick_tier3_id,
-          pick_tier4_id,
-          reserve_id,
-          tiebreaker: Number(tiebreaker),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'player_name' }
-      )
-      .select()
-      .single();
+      .select('id, pin')
+      .ilike('player_name', player_name.trim())
+      .maybeSingle();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ entry: data });
+    const entryData = {
+      player_name: player_name.trim(),
+      pick_tier1_id,
+      pick_tier2_id,
+      pick_tier3_id,
+      pick_tier4_id,
+      reserve_id,
+      tiebreaker: Number(tiebreaker),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existing) {
+      // Editing: verify PIN
+      if (!pin || pin.toString() !== existing.pin) {
+        return NextResponse.json({ error: 'Incorrect PIN', requiresPin: true }, { status: 403 });
+      }
+      const { data, error } = await supabase
+        .from('entries')
+        .update(entryData)
+        .eq('id', existing.id)
+        .select(ENTRY_COLS)
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ entry: data });
+    } else {
+      // New entry: generate and store PIN
+      const newPin = generatePin();
+      const { data, error } = await supabase
+        .from('entries')
+        .insert({ ...entryData, pin: newPin })
+        .select(ENTRY_COLS)
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      // Return PIN once — client must save it
+      return NextResponse.json({ entry: data, pin: newPin });
+    }
   } catch (err) {
     console.error('POST /api/entries:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -99,7 +154,7 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-// PATCH /api/entries — toggle picks_locked in pool_config (admin only)
+// PATCH /api/entries — toggle picks_locked (admin only)
 export async function PATCH(req: NextRequest) {
   if (req.headers.get('x-admin-password') !== process.env.ADMIN_PASSWORD) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
