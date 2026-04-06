@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import NavTabs from '@/components/NavTabs';
+import { createServiceClient } from '@/lib/supabase';
+
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: 'Masters Pool 2026',
@@ -13,7 +16,11 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const supabase = createServiceClient();
+  const { data: config } = await supabase.from('pool_config').select('picks_locked').single();
+  const isLocked = config?.picks_locked ?? false;
+
   return (
     <html lang="en">
       <body className="bg-masters-surface min-h-screen font-sans antialiased">
@@ -34,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </p>
             </div>
             {/* Tab nav */}
-            <NavTabs />
+            <NavTabs isLocked={isLocked} />
           </div>
         </header>
 

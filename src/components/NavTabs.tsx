@@ -4,18 +4,18 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 
-const TABS = [
-  { href: '/pick', label: 'My Picks' },
-  { href: '/leaderboard', label: 'Leaderboard' },
-  { href: '/admin', label: 'Admin' },
-];
-
-export default function NavTabs() {
+export default function NavTabs({ isLocked }: { isLocked: boolean }) {
   const pathname = usePathname();
+
+  const tabs = [
+    { href: '/pick', label: 'My Picks', visible: true },
+    { href: '/leaderboard', label: 'Leaderboard', visible: isLocked },
+    { href: '/admin', label: 'Admin', visible: true },
+  ].filter((t) => t.visible);
 
   return (
     <nav className="flex mt-5" role="tablist">
-      {TABS.map(({ href, label }) => {
+      {tabs.map(({ href, label }) => {
         const active = pathname.startsWith(href);
         return (
           <Link

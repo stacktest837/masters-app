@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase';
 import type { Golfer, Score } from '@/types';
 import { calculateTeamScore, sortEntries } from '@/lib/scoring';
@@ -31,6 +32,10 @@ export type RankedEntry = {
 
 export default async function LeaderboardPage() {
   const supabase = createServiceClient();
+
+  // Guard: leaderboard is hidden until picks are locked
+  const { data: lockCheck } = await supabase.from('pool_config').select('picks_locked').single();
+  if (!lockCheck?.picks_locked) redirect('/pick');
 
   const [{ data: entriesRaw }, { data: scoresRaw }, { data: configRaw }] = await Promise.all([
     supabase
