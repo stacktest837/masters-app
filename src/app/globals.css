@@ -1,3 +1,65 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Remove iOS tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbars on scrollable containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Prevent text selection on interactive cards */
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Gold shimmer gradient for premium highlights */
+.gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    #d4af37 0%,
+    #f0d978 40%,
+    #d4af37 60%,
+    #b8962e 100%
+  );
+  background-size: 200% auto;
+}
+
+/* Subtle green gradient for hero sections */
+.hero-gradient {
+  background: linear-gradient(160deg, #081a0e 0%, #0a5c36 100%);
+}
+
+/* Card base */
+.card {
+  @apply bg-white rounded-2xl shadow-card;
+}
+
+/* Score color utilities */
+.score-under { @apply text-red-500; }
+.score-even  { @apply text-gray-500; }
+.score-over  { @apply text-gray-600; }
+
+/* Golfer chip */
+.golfer-chip {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+}
+
+/* Active / press states */
+.pressable {
+  @apply transition-transform duration-100 active:scale-[0.97];
+}
