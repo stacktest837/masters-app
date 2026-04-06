@@ -22,13 +22,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="max-w-lg mx-auto px-5 pt-8 pb-0">
             {/* Logo */}
             <div className="text-center">
-              <p className="text-masters-gold/70 text-[10px] font-semibold tracking-[0.25em] uppercase mb-2">
-                2026 · Augusta National
-              </p>
-              <h1 className="font-serif text-2xl font-bold text-masters-gold tracking-wide">
+              <div className="text-[32px] leading-none mb-2 select-none">⛳</div>
+              <h1
+                className="font-serif font-bold text-masters-gold tracking-[0.18em] uppercase"
+                style={{ fontSize: '20px', letterSpacing: '0.18em' }}
+              >
                 Masters Pool
               </h1>
-              <p className="text-white/40 text-xs mt-1">April 9–12</p>
+              <p className="font-serif text-masters-gold/40 font-normal tracking-[0.35em] mt-1 text-sm">
+                2026
+              </p>
             </div>
             {/* Tab nav */}
             <NavTabs />
