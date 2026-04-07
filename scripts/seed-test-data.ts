@@ -30,38 +30,46 @@ const ENTRIES = [
 
 // Scores for every golfer that appears in any entry above
 // score_to_par: 999 = MC/WD
+// Designed for varied daily winners:
+//   R1 winner → Dave Wilson  (Rahm -6 + Koepka -4, birdies spread across different holes)
+//   R2 winner → Mike Smith   (McIlroy -5 + Matsuyama -5, both hot in round 2)
+//   Overall   → Sarah Brown  (Xander + Spieth, consistent -4/-4 both rounds, deep team)
 const GOLFER_SCORES: Record<string, { totalStp: number; r1: number; r2: number; status: 'active' | 'cut' | 'wd'; currentRound: number | null }> = {
-  'Scottie Scheffler':  { totalStp: -12, r1: -6, r2: -6, status: 'active', currentRound: 2 },
-  'Rory McIlroy':       { totalStp: -10, r1: -5, r2: -5, status: 'active', currentRound: 2 },
-  'Jon Rahm':           { totalStp:  -9, r1: -5, r2: -4, status: 'active', currentRound: 2 },
-  'Xander Schauffele':  { totalStp:  -8, r1: -4, r2: -4, status: 'active', currentRound: 2 },
-  'Collin Morikawa':    { totalStp:  -7, r1: -4, r2: -3, status: 'active', currentRound: 2 },
-  'Bryson DeChambeau':  { totalStp:  -6, r1: -3, r2: -3, status: 'active', currentRound: 2 },
-  'Justin Thomas':      { totalStp:  -8, r1: -4, r2: -4, status: 'active', currentRound: 2 },
-  'Hideki Matsuyama':   { totalStp:  -7, r1: -3, r2: -4, status: 'active', currentRound: 2 },
-  'Brooks Koepka':      { totalStp:  -6, r1: -3, r2: -3, status: 'active', currentRound: 2 },
-  'Jordan Spieth':      { totalStp:  -5, r1: -2, r2: -3, status: 'active', currentRound: 2 },
-  'Viktor Hovland':     { totalStp:  -4, r1: -2, r2: -2, status: 'active', currentRound: 2 },
-  'Tommy Fleetwood':    { totalStp:  -3, r1: -1, r2: -2, status: 'active', currentRound: 2 },
-  'Patrick Cantlay':    { totalStp:  -5, r1: -2, r2: -3, status: 'active', currentRound: 2 },
-  'Shane Lowry':        { totalStp:  -4, r1: -2, r2: -2, status: 'active', currentRound: 2 },
-  'Tyrrell Hatton':     { totalStp:  -3, r1: -1, r2: -2, status: 'active', currentRound: 2 },
-  'Russell Henley':     { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 },
-  'Robert MacIntyre':   { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 },
-  'Min Woo Lee':        { totalStp:   1, r1:  0, r2:  1, status: 'active', currentRound: 2 },
-  'Akshay Bhatia':      { totalStp:  -3, r1: -1, r2: -2, status: 'active', currentRound: 2 },
-  'Will Zalatoris':     { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 },
-  'Corey Conners':      { totalStp: 999, r1:  2, r2:  3, status: 'cut',    currentRound: null }, // MC after R2
-  'Jason Day':          { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 },
-  'Tom Kim':            { totalStp:   0, r1:  1, r2: -1, status: 'active', currentRound: 2 },
-  'Sam Burns':          { totalStp:   2, r1:  1, r2:  1, status: 'active', currentRound: 2 },
+  // T1 — spread across entries so no team monopolises
+  'Scottie Scheffler':  { totalStp:  -7, r1: -2, r2: -5, status: 'active', currentRound: 2 }, // Gary  — slow start
+  'Rory McIlroy':       { totalStp:  -8, r1: -3, r2: -5, status: 'active', currentRound: 2 }, // Mike  — dominant R2
+  'Jon Rahm':           { totalStp:  -8, r1: -6, r2: -2, status: 'active', currentRound: 2 }, // Dave  — dominant R1
+  'Xander Schauffele':  { totalStp:  -8, r1: -4, r2: -4, status: 'active', currentRound: 2 }, // Sarah — consistent
+  'Collin Morikawa':    { totalStp:  -6, r1: -3, r2: -3, status: 'active', currentRound: 2 }, // Chris
+  'Bryson DeChambeau':  { totalStp:  -4, r1: -3, r2: -1, status: 'active', currentRound: 2 }, // Tom   — fades R2
+  // T2
+  'Justin Thomas':      { totalStp:  -5, r1: -3, r2: -2, status: 'active', currentRound: 2 }, // Gary
+  'Hideki Matsuyama':   { totalStp:  -6, r1: -1, r2: -5, status: 'active', currentRound: 2 }, // Mike  — strong R2
+  'Brooks Koepka':      { totalStp:  -5, r1: -4, r2: -1, status: 'active', currentRound: 2 }, // Dave  — strong R1
+  'Jordan Spieth':      { totalStp:  -7, r1: -4, r2: -3, status: 'active', currentRound: 2 }, // Sarah — strong both
+  'Viktor Hovland':     { totalStp:  -3, r1: -1, r2: -2, status: 'active', currentRound: 2 }, // Chris
+  'Tommy Fleetwood':    { totalStp:  -5, r1: -1, r2: -4, status: 'active', currentRound: 2 }, // Tom   — strong R2
+  // T3
+  'Patrick Cantlay':    { totalStp:  -3, r1: -1, r2: -2, status: 'active', currentRound: 2 }, // Gary
+  'Shane Lowry':        { totalStp:  -3, r1: -2, r2: -1, status: 'active', currentRound: 2 }, // Mike
+  'Tyrrell Hatton':     { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 }, // Dave
+  'Russell Henley':     { totalStp:  -4, r1: -2, r2: -2, status: 'active', currentRound: 2 }, // Sarah — solid support
+  'Robert MacIntyre':   { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 }, // Chris
+  'Min Woo Lee':        { totalStp:   2, r1:  1, r2:  1, status: 'active', currentRound: 2 }, // Tom   — liability
+  // T4
+  'Akshay Bhatia':      { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 }, // Gary
+  'Will Zalatoris':     { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 }, // Mike
+  'Corey Conners':      { totalStp: 999, r1:  3, r2:  4, status: 'cut',    currentRound: null }, // Dave — MC, reserve activates R3/R4
+  'Jason Day':          { totalStp:   1, r1:  1, r2:  0, status: 'active', currentRound: 2 }, // Sarah — weak T4
+  'Tom Kim':            { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 }, // Chris
+  'Sam Burns':          { totalStp:   1, r1:  1, r2:  0, status: 'active', currentRound: 2 }, // Tom
   // Reserves
   'Tony Finau':         { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 },
   'Sergio Garcia':      { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 },
-  'Sepp Straka':        { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 },
-  'Wyndham Clark':      { totalStp:   0, r1:  1, r2: -1, status: 'active', currentRound: 2 },
-  'Keegan Bradley':     { totalStp:   1, r1:  1, r2:  0, status: 'active', currentRound: 2 },
-  'J.J. Spaun':         { totalStp:   0, r1:  0, r2:  0, status: 'active', currentRound: 2 },
+  'Sepp Straka':        { totalStp:  -2, r1: -1, r2: -1, status: 'active', currentRound: 2 }, // Dave's reserve — activates R3/R4
+  'Wyndham Clark':      { totalStp:  -1, r1:  0, r2: -1, status: 'active', currentRound: 2 },
+  'Keegan Bradley':     { totalStp:   0, r1:  0, r2:  0, status: 'active', currentRound: 2 },
+  'J.J. Spaun':         { totalStp:   1, r1:  1, r2:  0, status: 'active', currentRound: 2 },
 };
 
 // ── Deterministic hole generator ──────────────────────────────────────────────
