@@ -75,14 +75,23 @@ export default function AdminPage() {
   async function toggleLock() {
     if (!config) return;
     setLockLoading(true);
-    const res = await fetch('/api/entries', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': password },
-      body: JSON.stringify({ picks_locked: !config.picks_locked, config_id: config.id }),
-    });
-    const json = await res.json();
-    if (json.config) setConfig(json.config);
-    setLockLoading(false);
+    try {
+      const res = await fetch('/api/entries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': password },
+        body: JSON.stringify({ picks_locked: !config.picks_locked }),
+      });
+      const json = await res.json();
+      if (json.error) {
+        alert(`Lock toggle failed: ${json.error}`);
+      } else if (json.config) {
+        setConfig(json.config);
+      }
+    } catch (err) {
+      alert(`Lock toggle failed: ${String(err)}`);
+    } finally {
+      setLockLoading(false);
+    }
   }
 
   async function syncESPN() {

@@ -9,9 +9,7 @@
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",
-    "seed": "npx tsx scripts/seed-golfers.ts",
-    "seed:test": "npx tsx scripts/seed-test-data.ts",
-    "seed:clear": "npx tsx scripts/clear-test-data.ts"
+    "seed": "npx tsx scripts/seed-golfers.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

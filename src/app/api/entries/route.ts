@@ -131,12 +131,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const { picks_locked, config_id } = await req.json();
+    const { picks_locked } = await req.json();
     const supabase = createServiceClient();
+
+    // Fetch config ID server-side — don't rely on client to send it correctly
+    const { data: existing, error: fetchErr } = await supabase
+      .from('pool_config')
+      .select('id')
+      .single();
+    if (fetchErr || !existing) {
+      return NextResponse.json({ error: 'pool_config row not found' }, { status: 500 });
+    }
+
     const { data, error } = await supabase
       .from('pool_config')
       .update({ picks_locked, updated_at: new Date().toISOString() })
-      .eq('id', config_id)
+      .eq('id', existing.id)
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
