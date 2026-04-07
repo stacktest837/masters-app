@@ -10,6 +10,7 @@ export default function NavTabs({ isLocked }: { isLocked: boolean }) {
   const tabs = [
     { href: '/pick', label: 'My Picks', visible: true },
     { href: '/leaderboard', label: 'Leaderboard', visible: isLocked },
+    { href: '/scorecard', label: 'Scorecard', visible: true },
     { href: '/admin', label: 'Admin', visible: true },
   ].filter((t) => t.visible);
 

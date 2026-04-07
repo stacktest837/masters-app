@@ -6,7 +6,7 @@ export async function GET() {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('scores')
-    .select('golfer_id, score_to_par, status, today_score, current_hole, current_round, updated_at');
+    .select('golfer_id, score_to_par, status, today_score, current_hole, current_round, round1_score, round2_score, round3_score, round4_score, updated_at');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ scores: data ?? [] });
 }

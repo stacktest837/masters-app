@@ -1,19 +1,18 @@
 import { redirect } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase';
 import type { Golfer, Score } from '@/types';
-import { calculateTeamScore, sortEntries, computeDailyWinners, type DailyWinner } from '@/lib/scoring';
+import { computeBestBallTeam, computeDailyWinners, sortEntries, type DailyWinner, type BestBallRound, type GolferHoleData } from '@/lib/scoring';
 import RefreshButton from './RefreshButton';
 import LeaderboardClient from './LeaderboardClient';
 
 export const revalidate = 60;
 
-export type { DailyWinner };
+export type { DailyWinner, BestBallRound };
 
 export type PickDetail = {
   golfer: Golfer;
-  score: number | null;
+  score: number | null;       // individual golfer's tournament score-to-par
   status: string | undefined;
-  replaced: boolean;
   todayScore: number | null;
   currentHole: number | null;
   currentRound: number | null;
@@ -22,14 +21,15 @@ export type PickDetail = {
 export type RankedEntry = {
   id: string;
   player_name: string;
-  total: number | null;
-  tiebreaker: number;
+  total: number | null;        // best-ball total score-to-par
+  totalStrokes: number | null; // best-ball total raw strokes
+  rounds: BestBallRound[];
   reserveUsed: boolean;
   picks: PickDetail[];
   reserve: Golfer | null;
   rank: number;
   tied: boolean;
-  movement: number | null; // positive = moved up, negative = moved down, null = no snapshot
+  movement: number | null;
 };
 
 export default async function LeaderboardPage({
@@ -44,34 +44,43 @@ export default async function LeaderboardPage({
   const { data: lockCheck } = await supabase.from('pool_config').select('picks_locked').single();
   if (!lockCheck?.picks_locked && !isPreview) redirect('/pick');
 
-  const [{ data: entriesRaw }, { data: scoresRaw }, { data: configRaw }] = await Promise.all([
-    supabase
-      .from('entries')
-      .select(`
-        *,
-        pick_tier1:pick_tier1_id(id, name, tier, display_order),
-        pick_tier2:pick_tier2_id(id, name, tier, display_order),
-        pick_tier3:pick_tier3_id(id, name, tier, display_order),
-        pick_tier4:pick_tier4_id(id, name, tier, display_order),
-        reserve:reserve_id(id, name, tier, display_order)
-      `)
-      .order('created_at'),
-    supabase.from('scores').select('*'),
-    supabase.from('pool_config').select('rank_snapshot').single(),
-  ]);
+  const [{ data: entriesRaw }, { data: scoresRaw }, { data: holesRaw }, { data: configRaw }] =
+    await Promise.all([
+      supabase
+        .from('entries')
+        .select(`
+          *,
+          pick_tier1:pick_tier1_id(id, name, tier, display_order),
+          pick_tier2:pick_tier2_id(id, name, tier, display_order),
+          pick_tier3:pick_tier3_id(id, name, tier, display_order),
+          pick_tier4:pick_tier4_id(id, name, tier, display_order),
+          reserve:reserve_id(id, name, tier, display_order)
+        `)
+        .order('created_at'),
+      supabase.from('scores').select('*'),
+      supabase.from('golfer_holes').select('golfer_id, round_number, hole_number, strokes, score_to_par'),
+      supabase.from('pool_config').select('rank_snapshot').single(),
+    ]);
 
-  const rankSnapshot: Record<string, number> = (configRaw as { rank_snapshot?: Record<string, number> } | null)?.rank_snapshot ?? {};
+  const rankSnapshot: Record<string, number> =
+    (configRaw as { rank_snapshot?: Record<string, number> } | null)?.rank_snapshot ?? {};
 
   const scores = (scoresRaw as Score[] | null) ?? [];
-  const scoreMap = new Map<string, number>(scores.map((s) => [s.golfer_id, s.score_to_par]));
   const statusMap = new Map<string, string>(scores.map((s) => [s.golfer_id, s.status]));
+  const scoreMap = new Map<string, number>(scores.map((s) => [s.golfer_id, s.score_to_par]));
   const todayMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.today_score ?? null]));
   const holeMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_hole ?? null]));
   const roundMap = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.current_round ?? null]));
-  const r1Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round1_score ?? null]));
-  const r2Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round2_score ?? null]));
-  const r3Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round3_score ?? null]));
-  const r4Map = new Map<string, number | null>(scores.map((s) => [s.golfer_id, s.round4_score ?? null]));
+
+  const holeData: GolferHoleData[] = (
+    holesRaw as { golfer_id: string; round_number: number; hole_number: number; strokes: number; score_to_par: number }[] | null ?? []
+  ).map((h) => ({
+    golferId: h.golfer_id,
+    round: h.round_number,
+    hole: h.hole_number,
+    strokes: h.strokes,
+    scoreToPar: h.score_to_par,
+  }));
 
   const entries = (entriesRaw ?? []) as Record<string, unknown>[];
 
@@ -83,24 +92,20 @@ export default async function LeaderboardPage({
       entry.pick_tier4_id,
     ] as string[];
 
-    const result = calculateTeamScore(
-      { pickIds, reserveId: entry.reserve_id as string, tiebreaker: entry.tiebreaker as number },
-      scoreMap
-    );
-
+    const result = computeBestBallTeam(pickIds, entry.reserve_id as string, holeData, statusMap);
     const golfers = [entry.pick_tier1, entry.pick_tier2, entry.pick_tier3, entry.pick_tier4] as Golfer[];
 
     return {
       id: entry.id as string,
       player_name: entry.player_name as string,
       total: result.total,
-      tiebreaker: entry.tiebreaker as number,
+      totalStrokes: result.totalStrokes,
+      rounds: result.rounds,
       reserveUsed: result.reserveUsed,
       picks: pickIds.map((id, i) => ({
         golfer: golfers[i],
         score: scoreMap.get(id) ?? null,
         status: statusMap.get(id),
-        replaced: result.golferDetails[i]?.replaced ?? false,
         todayScore: todayMap.get(id) ?? null,
         currentHole: holeMap.get(id) ?? null,
         currentRound: roundMap.get(id) ?? null,
@@ -120,8 +125,8 @@ export default async function LeaderboardPage({
     return { ...entry, rank, tied, movement };
   });
 
-  // Daily winners — computed from per-round scores
-  const entryInputs = (entriesRaw ?? []).map((e) => {
+  // Daily winners computed from best-ball hole data
+  const entryInputs = entries.map((e) => {
     const entry = e as Record<string, unknown>;
     return {
       id: entry.id as string,
@@ -136,14 +141,10 @@ export default async function LeaderboardPage({
     };
   });
 
-  const dailyWinners = computeDailyWinners(
-    entryInputs,
-    [r1Map, r2Map, r3Map, r4Map],
-    statusMap
-  );
+  const dailyWinners = computeDailyWinners(entryInputs, holeData, statusMap);
 
-  const hasScores = scores.length > 0;
-  const lastUpdated = hasScores
+  const hasScores = holeData.length > 0 || scores.some((s) => s.score_to_par !== null);
+  const lastUpdated = scores.length > 0
     ? scores.reduce((latest, s) => (s.updated_at > latest ? s.updated_at : latest), scores[0].updated_at)
     : null;
 
@@ -164,8 +165,7 @@ export default async function LeaderboardPage({
         <RefreshButton />
       </div>
 
-      {/* Leaderboard with client-side name lookup */}
-      <LeaderboardClient ranked={ranked} hasScores={hasScores} dailyWinners={dailyWinners} />
+      <LeaderboardClient ranked={ranked} hasScores={hasScores} dailyWinners={dailyWinners} entryCount={ranked.length} />
     </div>
   );
 }

@@ -48,6 +48,16 @@ export interface PoolConfig {
   updated_at: string;
 }
 
+export interface GolferHole {
+  id: string;
+  golfer_id: string;
+  round_number: number;
+  hole_number: number;
+  strokes: number | null;
+  score_to_par: number | null;
+  updated_at: string;
+}
+
 export interface TeamScore {
   entry: EntryWithGolfers;
   total: number | null;

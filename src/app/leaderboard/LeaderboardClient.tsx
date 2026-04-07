@@ -5,30 +5,42 @@ import { cn } from '@/lib/cn';
 import type { RankedEntry, DailyWinner } from './page';
 import type { Golfer } from '@/types';
 import MyTeamTracker from '@/components/MyTeamTracker';
+import { computePayouts } from '@/lib/scoring';
 
-function fmt(score: number | null, status?: string): string {
+function fmt(score: number | null): string {
   if (score === null) return '—';
-  if (score === 999 || status === 'cut' || status === 'wd') return 'MC';
   if (score === 0) return 'E';
   return score > 0 ? `+${score}` : String(score);
 }
 
-function fmtDaily(score: number): string {
-  if (score === 0) return 'E';
-  return score > 0 ? `+${score}` : String(score);
+function fmtIndividual(score: number | null, status?: string): string {
+  if (score === null) return '—';
+  if (score === 999 || status === 'cut' || status === 'wd') return 'MC';
+  return fmt(score);
 }
 
 interface Props {
   ranked: RankedEntry[];
   hasScores: boolean;
   dailyWinners: (DailyWinner | null)[];
+  entryCount: number;
 }
 
-// ── Payouts card ─────────────────────────────────────────────────────────────
+// ── Payouts card ──────────────────────────────────────────────────────────────
 
-function PayoutsCard({ dailyWinners, overall }: { dailyWinners: (DailyWinner | null)[]; overall: RankedEntry | null }) {
-  const hasAny = dailyWinners.some((w) => w !== null) || (overall !== null);
+function PayoutsCard({
+  dailyWinners,
+  overall,
+  entryCount,
+}: {
+  dailyWinners: (DailyWinner | null)[];
+  overall: RankedEntry | null;
+  entryCount: number;
+}) {
+  const hasAny = dailyWinners.some((w) => w !== null) || overall !== null;
   if (!hasAny) return null;
+
+  const payouts = computePayouts(entryCount);
 
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-4">
@@ -42,16 +54,17 @@ function PayoutsCard({ dailyWinners, overall }: { dailyWinners: (DailyWinner | n
           const winner = dailyWinners[round - 1] ?? null;
           return (
             <div key={round} className="px-4 py-3">
-              <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-1">
+              <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-0.5">
                 Round {round}
               </p>
+              <p className="text-[10px] text-gray-400 font-mono mb-1">${payouts.dailyPrizePerRound.toFixed(2)}</p>
               {winner ? (
                 <>
                   <p className="text-sm font-semibold text-gray-800 leading-tight truncate">
                     {winner.playerName.split(' ')[0]} {winner.playerName.split(' ').slice(-1)[0]}
                   </p>
                   <p className="text-xs font-bold font-mono text-masters-green mt-0.5">
-                    {fmtDaily(winner.dailyScore)}
+                    {fmt(winner.dailyScore)}
                     {winner.tiebreakWin && (
                       <span className="text-[9px] text-gray-400 font-normal ml-1">TB</span>
                     )}
@@ -68,20 +81,28 @@ function PayoutsCard({ dailyWinners, overall }: { dailyWinners: (DailyWinner | n
       {/* Overall leader */}
       {overall && (
         <div className="border-t border-gray-100 px-4 py-3 bg-masters-gold/5">
-          <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest mb-1">
-            Overall Leader
-          </p>
+          <div className="flex items-start justify-between mb-1">
+            <p className="text-[10px] text-masters-gold font-bold uppercase tracking-widest">
+              Overall Leader
+            </p>
+            <p className="text-[10px] text-gray-400 font-mono">${payouts.overallPrize.toFixed(2)}</p>
+          </div>
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-800">
               {overall.player_name}
               {overall.tied && <span className="text-[10px] text-gray-400 ml-1 font-normal">T1</span>}
             </p>
-            <p className={cn(
-              'text-base font-bold font-mono tabular-nums',
-              overall.total !== null && overall.total < 0 ? 'text-red-500' : 'text-gray-700'
-            )}>
-              {overall.total !== null ? fmt(overall.total) : '—'}
-            </p>
+            <div className="text-right">
+              <p className={cn(
+                'text-base font-bold font-mono tabular-nums leading-tight',
+                overall.total !== null && overall.total < 0 ? 'text-red-500' : 'text-gray-700'
+              )}>
+                {fmt(overall.total)}
+              </p>
+              {overall.totalStrokes !== null && (
+                <p className="text-[10px] text-gray-400 font-mono">{overall.totalStrokes} strokes</p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -89,7 +110,7 @@ function PayoutsCard({ dailyWinners, overall }: { dailyWinners: (DailyWinner | n
   );
 }
 
-// ── Rank badge ──────────────────────────────────────────────────────────────
+// ── Rank badge ────────────────────────────────────────────────────────────────
 
 function RankBadge({ rank, tied }: { rank: number; tied: boolean }) {
   if (rank === 1)
@@ -119,85 +140,61 @@ function RankBadge({ rank, tied }: { rank: number; tied: boolean }) {
   );
 }
 
-// ── Movement badge ───────────────────────────────────────────────────────────
+// ── Movement badge ────────────────────────────────────────────────────────────
 
 function MovementBadge({ movement }: { movement: number | null }) {
   if (movement === null) return null;
   if (movement === 0) return <span className="text-[10px] text-gray-400 font-mono">—</span>;
   if (movement > 0)
-    return (
-      <span className="text-[10px] font-bold text-emerald-500 font-mono">
-        ↑{movement}
-      </span>
-    );
-  return (
-    <span className="text-[10px] font-bold text-red-400 font-mono">
-      ↓{Math.abs(movement)}
-    </span>
-  );
+    return <span className="text-[10px] font-bold text-emerald-500 font-mono">↑{movement}</span>;
+  return <span className="text-[10px] font-bold text-red-400 font-mono">↓{Math.abs(movement)}</span>;
 }
 
-// ── Score display ────────────────────────────────────────────────────────────
+// ── Score display ─────────────────────────────────────────────────────────────
 
-function ScoreDisplay({ total, hasScores }: { total: number | null; hasScores: boolean }) {
+function ScoreDisplay({ total, totalStrokes, hasScores }: { total: number | null; totalStrokes: number | null; hasScores: boolean }) {
   if (!hasScores || total === null)
     return <span className="text-2xl font-bold font-mono text-gray-300">—</span>;
-  const display = total === 0 ? 'E' : total > 0 ? `+${total}` : String(total);
   return (
-    <span
-      className={cn(
-        'text-2xl font-bold font-mono tabular-nums',
+    <div className="text-right">
+      <div className={cn(
+        'text-2xl font-bold font-mono tabular-nums leading-tight',
         total < 0 ? 'text-red-500' : total === 0 ? 'text-gray-500' : 'text-gray-600'
+      )}>
+        {fmt(total)}
+      </div>
+      {totalStrokes !== null && (
+        <div className="text-[10px] text-gray-400 font-mono tabular-nums">
+          {totalStrokes} strokes
+        </div>
       )}
-    >
-      {display}
-    </span>
+    </div>
   );
 }
 
-// ── Golfer chip ──────────────────────────────────────────────────────────────
+// ── Golfer chip ───────────────────────────────────────────────────────────────
 
 function GolferChip({
   golfer,
   score,
   status,
-  replaced,
-  highlight,
 }: {
   golfer: Golfer;
   score: number | null;
   status: string | undefined;
-  replaced: boolean;
-  highlight?: 'best' | 'worst' | null;
 }) {
   const mc = score === 999 || status === 'cut' || status === 'wd';
   const lastName = golfer.name.split(' ').slice(-1)[0];
-  const scoreStr = score !== null ? fmt(score, status) : null;
+  const scoreStr = score !== null ? fmtIndividual(score, status) : null;
 
   return (
-    <div
-      className={cn(
-        'golfer-chip',
-        mc || replaced
-          ? 'bg-gray-100 text-gray-400 line-through'
-          : highlight === 'best'
-          ? 'bg-masters-green/15 text-masters-green ring-1 ring-masters-green/40'
-          : highlight === 'worst'
-          ? 'bg-red-50 text-red-500 ring-1 ring-red-300'
-          : 'bg-masters-green/10 text-masters-green'
-      )}
-    >
-      {highlight === 'best' && !mc && !replaced && (
-        <span className="text-[9px] leading-none">⭐</span>
-      )}
+    <div className={cn(
+      'golfer-chip',
+      mc ? 'bg-gray-100 text-gray-400 line-through' : 'bg-masters-green/10 text-masters-green'
+    )}>
       <span>{lastName}</span>
       {scoreStr && (
-        <span
-          className={cn(
-            'font-mono font-bold',
-            mc ? 'text-gray-400' : highlight === 'worst' ? 'text-red-500' : score !== null && score < 0 ? 'text-red-500' : ''
-          )}
-        >
+        <span className={cn('font-mono font-bold', mc ? 'text-gray-400' : score !== null && score < 0 ? 'text-red-500' : '')}>
           {scoreStr}
         </span>
       )}
@@ -205,7 +202,7 @@ function GolferChip({
   );
 }
 
-// ── Entry card ───────────────────────────────────────────────────────────────
+// ── Entry card ────────────────────────────────────────────────────────────────
 
 function EntryCard({
   entry,
@@ -248,35 +245,20 @@ function EntryCard({
           )}
         </div>
 
-        <ScoreDisplay total={entry.total} hasScores={hasScores} />
+        <ScoreDisplay total={entry.total} totalStrokes={entry.totalStrokes} hasScores={hasScores} />
       </div>
 
       {/* Golfer chips */}
       <div className="px-4 pb-3 border-t border-gray-50 pt-3">
         <div className="flex flex-wrap gap-1.5">
-          {entry.picks.map(({ golfer, score, status, replaced }) => {
+          {entry.picks.map(({ golfer, score, status }) => {
             if (!golfer) return null;
-            const mc = score === 999 || status === 'cut' || status === 'wd';
-            const effectiveScore = mc || replaced ? null : score;
-            let highlight: 'best' | 'worst' | null = null;
-            if (hasScores && effectiveScore !== null) {
-              const activePicks = entry.picks.filter(
-                (p) => p.score !== null && p.score !== 999 && p.status !== 'cut' && p.status !== 'wd' && !p.replaced
-              );
-              const scores = activePicks.map((p) => p.score as number);
-              if (scores.length > 1) {
-                if (effectiveScore === Math.min(...scores)) highlight = 'best';
-                else if (effectiveScore === Math.max(...scores)) highlight = 'worst';
-              }
-            }
             return (
               <GolferChip
                 key={golfer.id}
                 golfer={golfer}
                 score={score}
                 status={status}
-                replaced={replaced}
-                highlight={highlight}
               />
             );
           })}
@@ -307,38 +289,29 @@ function EntryCard({
   );
 }
 
-// ── Main client component ────────────────────────────────────────────────────
+// ── Main client component ─────────────────────────────────────────────────────
 
-export default function LeaderboardClient({ ranked, hasScores, dailyWinners }: Props) {
+export default function LeaderboardClient({ ranked, hasScores, dailyWinners, entryCount }: Props) {
   const [nameQuery, setNameQuery] = useState('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, React.RefObject<HTMLDivElement>>>({});
 
-  // Build refs for each entry
   ranked.forEach((entry) => {
     if (!cardRefs.current[entry.id]) {
       cardRefs.current[entry.id] = { current: null } as React.RefObject<HTMLDivElement>;
     }
   });
 
-  // Live search as user types
   useEffect(() => {
     const q = nameQuery.trim().toLowerCase();
     if (!q) { setHighlightedId(null); return; }
-
     const match = ranked.find((e) => e.player_name.toLowerCase().includes(q));
-    if (match) {
-      setHighlightedId(match.id);
-    } else {
-      setHighlightedId(null);
-    }
+    setHighlightedId(match?.id ?? null);
   }, [nameQuery, ranked]);
 
-  // Scroll to highlighted entry
   useEffect(() => {
     if (!highlightedId) return;
-    const ref = cardRefs.current[highlightedId];
-    ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cardRefs.current[highlightedId]?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightedId]);
 
   if (ranked.length === 0) {
@@ -357,8 +330,7 @@ export default function LeaderboardClient({ ranked, hasScores, dailyWinners }: P
 
   return (
     <div>
-      {/* Payouts */}
-      <PayoutsCard dailyWinners={dailyWinners} overall={overallLeader} />
+      <PayoutsCard dailyWinners={dailyWinners} overall={overallLeader} entryCount={entryCount} />
 
       {/* Look Up My Picks */}
       <div className="bg-white rounded-2xl shadow-card p-4 mb-4">
@@ -386,9 +358,7 @@ export default function LeaderboardClient({ ranked, hasScores, dailyWinners }: P
           <p className="text-xs text-gray-400 mt-1.5">No entry found for &ldquo;{nameQuery.trim()}&rdquo;</p>
         )}
         {highlightedId && (
-          <p className="text-xs text-masters-green mt-1.5">
-            ↓ Highlighted below
-          </p>
+          <p className="text-xs text-masters-green mt-1.5">↓ Highlighted below</p>
         )}
       </div>
 
@@ -402,7 +372,6 @@ export default function LeaderboardClient({ ranked, hasScores, dailyWinners }: P
             hasScores={hasScores}
             cardRef={cardRefs.current[entry.id] as React.RefObject<HTMLDivElement>}
           />
-
         ))}
       </div>
     </div>
