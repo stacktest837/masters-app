@@ -100,11 +100,13 @@ masters-pool/
 - Admin: Simple password check (env var `ADMIN_PASSWORD`), not full Supabase auth
 - Edit flow: Enter your name → if entry exists, load picks for editing → resubmit overwrites
 
-### Scoring
-- Lowest combined strokes-to-par across 4 picked golfers wins
-- If a golfer misses the cut or withdraws (score = 999), reserve auto-swaps in
-- Reserve only replaces ONE golfer — if two miss the cut, only one gets replaced
-- Tiebreaker: closest guess to the winner's final score
+### Scoring (Best-Ball)
+- Per hole, take the MIN(score_to_par) across the active pool of 4 picked golfers → that's the team's score for the hole
+- Sum 18 holes = best-ball round score; sum completed rounds = total
+- Reserve rule: R3/R4 only — reserve is added to the active pool (not a 1-for-1 swap) if ANY pick has status 'cut' or 'wd'
+- Tiebreaker for daily winners: 1) lowest single best-ball round; 2) lowest individual golfer round; 3) split
+- Overall tiebreaker: `tiebreaker` field on entry (closest to winner's final score) — used only for the Scorecard display label
+- Hole-by-hole data stored in `golfer_holes` table; synced from ESPN linescores during ESPN sync
 
 ### Data Model
 - Golfers are seeded via script, not user-created
@@ -118,6 +120,12 @@ masters-pool/
 | 2026-04-06 | ESPN public API over paid sports APIs | Free, no key needed, sufficient for this use case |
 | 2026-04-06 | Server-side ESPN fetch | Avoids CORS, allows caching, keeps API logic controlled |
 | 2026-04-06 | First+last name required | Multiple people with same first name in the group |
+| 2026-04-06 | Best-ball scoring (per-hole min) instead of aggregate strokes | This IS a best-ball pool — requirement clarified mid-build |
+| 2026-04-06 | Reserve added to pool (not 1-for-1 swap) in R3/R4 | Simpler logic; reserve helps team if any pick is cut |
+| 2026-04-06 | Hole data from ESPN linescores (no new endpoint) | ESPN scoreboard already contains nested hole-by-hole data |
+| 2026-04-06 | Scorecard tab always visible (not gated by lock state) | Lets users see hole drill-down before/during tournament |
+| 2026-04-06 | Lock toggle fetches config ID server-side | Client-sent config_id was undefined → silent revert bug |
+| 2026-04-06 | Admin Preview button → /leaderboard?preview=<password> | Lets admin preview leaderboard before picks are locked |
 
 ## Gotchas Log
 | Issue | Context | Resolution |
@@ -125,9 +133,18 @@ masters-pool/
 | ESPN name mismatches | ESPN may list "Byeong Hun An" without hyphen | Fuzzy matching: normalize to lowercase alpha, fall back to first 3 chars + last name |
 | ESPN Masters event ID | Tournament may not appear on scoreboard endpoint until week-of | Check for event name containing "masters", show graceful message if not found |
 | Artifact storage unreliable | Initial prototype used Claude artifact storage — picks didn't persist | Moving to Supabase for reliable persistence |
+| Lock toggle silent revert | PATCH /api/entries used client-sent config_id; undefined → .eq('id', undefined) matches 0 rows → .single() throws → 500, json.config undefined, setConfig never fires | Fixed: fetch config ID server-side in PATCH handler |
+| TypeScript stale guard after tiebreaker removal | PickForm.tsx had `field !== 'tiebreaker'` check after tiebreaker was removed from EditField union | Removed the guard; was a dead branch causing TS error |
+| ESPN hole data structure | linescores is nested: competitor.linescores[roundIdx].linescores[holeIdx] | Parse `value` for strokes, `scoreType.displayValue` for score-to-par string |
+| golfer_holes upsert conflict | Must specify conflict target explicitly: `onConflict: 'golfer_id,round_number,hole_number'` | Required for Supabase upsert with composite unique constraint |
 
 ## Current TODOs
-- [ ] Phase 1: Core scaffold, Supabase setup, golfer seed
-- [ ] Phase 2: Pick sheet page, entry API
-- [ ] Phase 3: ESPN integration, leaderboard
-- [ ] Phase 4: Admin panel, lock picks, deploy
+- [x] Phase 1: Core scaffold, Supabase setup, golfer seed
+- [x] Phase 2: Pick sheet page, entry API
+- [x] Phase 3: ESPN integration, leaderboard
+- [x] Phase 4: Admin panel, lock picks, deploy
+- [x] Phase 5: Best-ball scoring rewrite, hole-by-hole data, Scorecard tab, Payouts
+- [ ] Run migration `docs/migration-005-golfer-holes.sql` in Supabase if not already applied
+- [ ] Optional: `ALTER TABLE entries DROP COLUMN IF EXISTS pin;` (dead column from removed PIN system)
+- [ ] Monitor ESPN sync during tournament — first sync validates name matching live
+- [ ] Next session: verify ESPN hole data syncs correctly on tournament day (April 9)
