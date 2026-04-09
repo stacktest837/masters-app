@@ -233,7 +233,7 @@ function EntryCard({
       <div className={cn('flex items-center gap-3 px-4 py-4', isLeader && 'bg-masters-gold/5')}>
         <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
           <RankBadge rank={entry.rank} tied={entry.tied} />
-          <MovementBadge movement={entry.movement} />
+          {hasScores && <MovementBadge movement={entry.movement} />}
         </div>
 
         <div className="flex-1 min-w-0">

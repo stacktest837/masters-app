@@ -10,7 +10,6 @@ const ENTRY_COLS = `
   pick_tier3_id,
   pick_tier4_id,
   reserve_id,
-  tiebreaker,
   created_at,
   updated_at,
   pick_tier1:pick_tier1_id(id, name, tier, display_order),
@@ -49,7 +48,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id, tiebreaker } = body;
+    const { player_name, pick_tier1_id, pick_tier2_id, pick_tier3_id, pick_tier4_id, reserve_id } = body;
 
     if (!player_name?.trim() || !player_name.trim().includes(' ')) {
       return NextResponse.json({ error: 'First and last name required' }, { status: 400 });
@@ -76,7 +75,6 @@ export async function POST(req: NextRequest) {
       pick_tier3_id,
       pick_tier4_id,
       reserve_id,
-      tiebreaker: Number(tiebreaker),
       updated_at: new Date().toISOString(),
     };
 

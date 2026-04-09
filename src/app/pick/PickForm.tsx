@@ -273,7 +273,6 @@ function EditView({
         pick_tier3_id: newPicks.tier3,
         pick_tier4_id: newPicks.tier4,
         reserve_id: newPicks.reserve,
-        tiebreaker: 0,
       }),
     });
   }
@@ -475,7 +474,7 @@ export default function PickForm({ tier1, tier2, tier3, tier4, isLocked }: Props
       const res = await fetch('/api/entries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: name, pick_tier1_id: picks.tier1, pick_tier2_id: picks.tier2, pick_tier3_id: picks.tier3, pick_tier4_id: picks.tier4, reserve_id: picks.reserve, tiebreaker: 0 }),
+        body: JSON.stringify({ player_name: name, pick_tier1_id: picks.tier1, pick_tier2_id: picks.tier2, pick_tier3_id: picks.tier3, pick_tier4_id: picks.tier4, reserve_id: picks.reserve }),
       });
       const json = await res.json();
       if (!res.ok) { setSubmitError(json.error || 'Submission failed'); }

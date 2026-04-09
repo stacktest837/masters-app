@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createServiceClient } from '@/lib/supabase';
 import type { Golfer, Score } from '@/types';
-import { computeBestBallTeam, computeDailyWinners, sortEntries, type DailyWinner, type BestBallRound, type GolferHoleData } from '@/lib/scoring';
+import { computeBestBallTeam, computeDailyWinners, type DailyWinner, type BestBallRound, type GolferHoleData } from '@/lib/scoring';
 import RefreshButton from './RefreshButton';
 import LeaderboardClient from './LeaderboardClient';
 
@@ -95,6 +95,23 @@ export default async function LeaderboardPage({
     const result = computeBestBallTeam(pickIds, entry.reserve_id as string, holeData, statusMap);
     const golfers = [entry.pick_tier1, entry.pick_tier2, entry.pick_tier3, entry.pick_tier4] as Golfer[];
 
+    // TB1: best single best-ball round score across all 4 rounds
+    const roundScores = result.rounds
+      .map((r) => r.scoreToPar)
+      .filter((s): s is number => s !== null);
+    const bestBallRound = roundScores.length > 0 ? Math.min(...roundScores) : null;
+
+    // TB2: best individual golfer round (raw strokes)
+    const allIds = [...pickIds, entry.reserve_id as string];
+    const golferRoundStrokes: number[] = [];
+    for (const gid of allIds) {
+      for (const r of [1, 2, 3, 4]) {
+        const gh = holeData.filter((h) => h.golferId === gid && h.round === r);
+        if (gh.length > 0) golferRoundStrokes.push(gh.reduce((sum, h) => sum + h.strokes, 0));
+      }
+    }
+    const bestIndividualRound = golferRoundStrokes.length > 0 ? Math.min(...golferRoundStrokes) : null;
+
     return {
       id: entry.id as string,
       player_name: entry.player_name as string,
@@ -102,6 +119,8 @@ export default async function LeaderboardPage({
       totalStrokes: result.totalStrokes,
       rounds: result.rounds,
       reserveUsed: result.reserveUsed,
+      bestBallRound,
+      bestIndividualRound,
       picks: pickIds.map((id, i) => ({
         golfer: golfers[i],
         score: scoreMap.get(id) ?? null,
@@ -114,7 +133,21 @@ export default async function LeaderboardPage({
     };
   });
 
-  const sorted = sortEntries(withScores);
+  const sorted = [...withScores].sort((a, b) => {
+    if (a.total === null && b.total === null) return 0;
+    if (a.total === null) return 1;
+    if (b.total === null) return -1;
+    if (a.total !== b.total) return a.total - b.total;
+    // TB1: lowest single best-ball round
+    const ab = a.bestBallRound ?? Infinity;
+    const bb = b.bestBallRound ?? Infinity;
+    if (ab !== bb) return ab - bb;
+    // TB2: lowest individual golfer round
+    const ai = a.bestIndividualRound ?? Infinity;
+    const bi = b.bestIndividualRound ?? Infinity;
+    return ai - bi;
+    // TB3: split — stable sort preserves original order
+  });
 
   const ranked: RankedEntry[] = sorted.map((entry, idx) => {
     const prev = idx > 0 ? sorted[idx - 1] : null;
@@ -143,7 +176,12 @@ export default async function LeaderboardPage({
 
   const dailyWinners = computeDailyWinners(entryInputs, holeData, statusMap);
 
-  const hasScores = holeData.length > 0 || scores.some((s) => s.score_to_par !== null);
+  const poolGolferIds = new Set(
+    entries.flatMap((e) => [
+      e.pick_tier1_id, e.pick_tier2_id, e.pick_tier3_id, e.pick_tier4_id, e.reserve_id,
+    ] as string[])
+  );
+  const hasScores = scores.some((s) => poolGolferIds.has(s.golfer_id) && s.score_to_par != null);
   const lastUpdated = scores.length > 0
     ? scores.reduce((latest, s) => (s.updated_at > latest ? s.updated_at : latest), scores[0].updated_at)
     : null;

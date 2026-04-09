@@ -13,7 +13,6 @@ export interface Entry {
   pick_tier3_id: string;
   pick_tier4_id: string;
   reserve_id: string;
-  tiebreaker: number;
   created_at: string;
   updated_at: string;
 }
