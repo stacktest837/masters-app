@@ -17,8 +17,8 @@ interface ESPNLinescoreRound {
 
 interface ESPNCompetitor {
   athlete: { displayName: string; shortName?: string };
-  score: { displayValue?: string; value?: string };
-  status: {
+  score: string | { displayValue?: string; value?: string };
+  status?: {
     type: { name: string };
     period?: number;       // current round (1-4)
     thru?: number | string; // holes played; 18 or "F" = round complete
@@ -119,9 +119,18 @@ export async function fetchMastersScores(): Promise<{
       const name = c.athlete?.displayName || c.athlete?.shortName || '';
       const cStatus = c.status?.type?.name;
 
-      const currentRound = typeof c.status?.period === 'number' ? c.status.period : null;
-      const thru = c.status?.thru;
-      const currentHole = thru === 'F' || thru === 18 ? 18 : typeof thru === 'number' ? thru : null;
+      // Derive current round from the last linescore that has actual score data
+      const activeRoundLs = [...(c.linescores ?? [])].reverse().find(
+        (ls) => ls.value !== undefined || ls.displayValue !== undefined
+      );
+      const currentRound = activeRoundLs?.period ?? (typeof c.status?.period === 'number' ? c.status.period : null);
+
+      // Derive holes played from nested linescores count in the active round
+      const holesPlayed = activeRoundLs?.linescores?.length ?? 0;
+      const currentHole = holesPlayed === 18 ? 18 : (holesPlayed > 0 ? holesPlayed : (
+        c.status?.thru === 'F' || c.status?.thru === 18 ? 18 :
+        typeof c.status?.thru === 'number' ? c.status.thru : null
+      ));
 
       // Parse round totals from outer linescores
       const parseLinescoreRound = (round: number): number | null => {
@@ -171,7 +180,7 @@ export async function fetchMastersScores(): Promise<{
           ...roundScores,
         });
       } else {
-        const sv = c.score?.displayValue ?? c.score?.value;
+        const sv = typeof c.score === 'string' ? c.score : (c.score?.displayValue ?? c.score?.value);
         if (sv !== undefined) {
           const n = sv === 'E' ? 0 : parseInt(sv as string);
           if (!isNaN(n)) {
