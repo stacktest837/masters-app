@@ -48,7 +48,12 @@ interface ESPNScoreResult {
 }
 
 const normalize = (name: string): string =>
-  name.toLowerCase().replace(/[^a-z]/g, '');
+  name
+    .replace(/ø/gi, 'o')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
 
 export function matchGolferName(
   espnName: string,
